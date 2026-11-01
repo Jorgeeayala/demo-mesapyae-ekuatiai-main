@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Migrador e-Kuatia'i</title>
+<style>
+  :root { --tinta: #2B2118; --suave: #6B5D50; --linea: #E4D8C6; --marca: #7A5C43; --ok: #2F6F4E; --mal: #8E2C2C; --fondo: #FFFDF8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; width: 340px; background: var(--fondo); color: var(--tinta); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 12px 14px 10px; border-bottom: 1px solid var(--linea); display: flex; gap: 10px; align-items: center; }
+  header img { width: 28px; height: 28px; }
+  header h1 { font-size: 14px; margin: 0; }
+  header p { margin: 0; color: var(--suave); font-size: 11px; }
+  section { padding: 10px 14px; border-bottom: 1px solid var(--linea); }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--marca); margin: 0 0 6px; }
+  .estado { font-weight: 600; }
+  .muted { color: var(--suave); }
+  button, select { font: inherit; border: 1px solid #C9B79E; background: #fff; color: var(--tinta); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+  button:hover { background: #F3EDE1; }
+  .fila { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  ul { list-style: none; margin: 6px 0 0; padding: 0; }
+  li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+  .ok { color: var(--ok); } .mal { color: var(--mal); }
+  footer { padding: 8px 14px 12px; color: var(--suave); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <img src="icons/icon-48.png" alt="">
+  <div><h1>Migrador e-Kuatia'i</h1><p>Mesa Pya'e → formulario de factura de la DNIT</p></div>
+</header>
+<section>
+  <h2>Factura en curso</h2>
+  <div id="pendiente" class="muted">Sin facturas pendientes. Esperando la próxima desde la caja.</div>
+  <div class="fila" style="margin-top:8px"><button id="ir">Ir a e-Kuatia'i</button><button id="descartar" hidden>Descartar</button></div>
+</section>
+<section>
+  <h2>Portal</h2>
+  <div class="fila">
+    <select id="entorno"><option value="PRODUCCION">Producción (ekuatia.set.gov.py)</option><option value="PRUEBAS">Pruebas (desa-ekuatia)</option></select>
+  </div>
+  <div class="fila" style="margin-top:8px">
+    <label for="obligacion">Obligación afectada</label>
+    <input id="obligacion" inputmode="numeric" maxlength="6" style="width:70px;font:inherit;border:1px solid #C9B79E;border-radius:7px;padding:4px 8px" placeholder="211">
+    <span class="muted">211 = IVA</span>
+  </div>
+</section>
+<section>
+  <h2>Campos del formulario</h2>
+  <div class="muted">Abrí “Nueva factura” en e-Kuatia'i y revisá qué campos encuentra el migrador.</div>
+  <div class="fila" style="margin-top:8px"><button id="revisar">Revisar</button><button id="calibrar">Calibrar campos</button><button id="borrar-mapa">Borrar calibración</button></div>
+  <ul id="campos"></ul>
+</section>
+<section>
+  <h2>Últimas facturas</h2>
+  <ul id="historial"><li class="muted">—</li></ul>
+</section>
+<footer>El inicio de sesión, el PIN del certificado y el botón de emitir son siempre tuyos: el migrador nunca los toca.</footer>
+<script src="popup.js"></script>
+</body>
+</html>

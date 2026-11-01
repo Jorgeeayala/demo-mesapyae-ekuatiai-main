@@ -1,0 +1,86 @@
+<title>Mesa Pya'e Andrade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* Layout: una columna de lectura con la grilla de módulos como tablero de entrada. */
+  :root {
+    --bg: #F3EDE1; --card: #FBF8F2; --fg: #1F1B17; --muted: #6E6257; --line: #DED4C3; --accent: #7A5C43; --ok: #4F6B3F; --warn-bg: #F5E8C8; --warn-fg: #6d5212;
+    --f-tit: 'Oswald', 'Arial Narrow', sans-serif; --f-body: 'Inter', system-ui, sans-serif; --f-serif: 'Source Serif 4', Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1C1814; --card: #26211C; --fg: #F1EADF; --muted: #B5A897; --line: #3B332B; --accent: #D2A985; --ok: #9DBB86; --warn-bg: #3A3020; --warn-fg: #EBD29A; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #1C1814; --card: #26211C; --fg: #F1EADF; --muted: #B5A897; --line: #3B332B; --accent: #D2A985; --ok: #9DBB86; --warn-bg: #3A3020; --warn-fg: #EBD29A; color-scheme: dark; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
+  .wrap { max-width: 880px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 48px; display: grid; gap: 22px; }
+  header { display: grid; gap: 6px; }
+  .eyebrow { font-family: var(--f-tit); text-transform: uppercase; letter-spacing: .16em; font-size: .78rem; color: var(--accent); }
+  h1 { font-family: var(--f-tit); font-weight: 600; font-size: clamp(1.9rem, 5vw, 2.6rem); text-transform: uppercase; letter-spacing: .02em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--f-tit); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; font-size: 1.05rem; margin: 0 0 10px; }
+  p { margin: 0; max-width: 65ch; }
+  .lead { font-family: var(--f-serif); font-size: 1.12rem; color: var(--fg); }
+  .note { background: var(--warn-bg); color: var(--warn-fg); border-radius: 10px; padding: 12px 14px; font-size: .92rem; }
+  .mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px; }
+  .mod { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); text-decoration: none; min-width: 0; }
+  .mod:hover, .mod:focus-visible { border-color: var(--accent); outline: none; }
+  .mod strong { font-family: var(--f-tit); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; font-size: 1.05rem; }
+  .mod span { color: var(--muted); font-size: .9rem; }
+  .mod code { font-size: .82rem; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: .93rem; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+  td.pin { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; }
+  .tbl { overflow-x: auto; }
+  ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; max-width: 70ch; }
+  section { display: grid; gap: 8px; }
+  footer { color: var(--muted); font-size: .85rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Andrade Casa Café y Arte · Ser o Límites</div>
+    <h1>Mesa Pya'e</h1>
+    <p class="lead">Pedidos, cocina y dos cajas conectados. Esta es la versión de demostración: funciona completa en el navegador, con la carta real de Andrade y datos de prueba.</p>
+  </header>
+
+  <p class="note">Demo sin servidor: lo que cargues queda guardado solo en este navegador. Para simular varias personas a la vez, abrí módulos en pestañas distintas del mismo navegador. Los precios de la carta son de ejemplo.</p>
+
+  <section>
+    <h2>Módulos</h2>
+    <div class="mods">
+      <a class="mod" href="app/menu.html"><strong>Menú QR · cliente</strong><span>Lo que ve el cliente al escanear la mesa (abre Mesa 1).</span></a>
+      <a class="mod" href="app/pedidos.html"><strong>Pedidos · mozos</strong><span>Mesas, comandas, cuentas.</span><code>mozo · 1111</code></a>
+      <a class="mod" href="app/cocina.html"><strong>Cocina</strong><span>Cola de preparación y listos.</span><code>cocina · 2222</code></a>
+      <a class="mod" href="app/caja.html?caja=CAJA_A"><strong>Caja 01 · Cafetería</strong><span>Cobros, turno y cierre del salón.</span><code>cajaa · 3333</code></a>
+      <a class="mod" href="app/caja.html?caja=CAJA_B"><strong>Caja 02 · Takeaway</strong><span>Ventas de la casita y retiros.</span><code>cajab · 4444</code></a>
+      <a class="mod" href="app/admin.html"><strong>Administración</strong><span>Reportes, catálogo, mesas y QR, usuarios.</span><code>admin · 1234</code></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Recorrido sugerido (10 minutos)</h2>
+    <ol>
+      <li>Abrí el <strong>Menú QR</strong>, pedí un Panini César con pan ciabatta y un jugo de 500 ml, y confirmá.</li>
+      <li>Entrá a <strong>Pedidos</strong> como mozo: la Mesa 1 aparece marcada “QR”. Aceptá el pedido en “Por aceptar”.</li>
+      <li>En <strong>Cocina</strong> tocá “Empezar” y luego “¡Listo!”. Volvé al menú del cliente: el estado cambia solo.</li>
+      <li>En <strong>Pedidos</strong>, entregalo desde “Listos para servir” y tocá “Solicitar cuenta” en la mesa.</li>
+      <li>En <strong>Caja 01</strong> abrí el turno, cobrá la mesa y cerrá la caja contando el efectivo.</li>
+      <li>En <strong>Caja 02</strong> registrá una venta para llevar y cobrala: queda separada de la Caja 01.</li>
+      <li>En <strong>Administración</strong> mirá el resumen por caja y el consolidado, y los QR de cada mesa.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Usuarios de prueba</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Usuario</th><th>PIN</th><th>Puede</th></tr></thead>
+      <tbody>
+        <tr><td>admin</td><td class="pin">1234</td><td>Todo; autoriza descuentos, anulaciones y reversos</td></tr>
+        <tr><td>mozo</td><td class="pin">1111</td><td>Mesas, comandas, aceptar QR, entregar, pedir cuenta</td></tr>
+        <tr><td>cocina</td><td class="pin">2222</td><td>Estados de preparación y disponibilidad de productos</td></tr>
+        <tr><td>cajaa</td><td class="pin">3333</td><td>Solo Caja 01: cobros, turno y cierre</td></tr>
+        <tr><td>cajab</td><td class="pin">4444</td><td>Solo Caja 02: ventas para llevar, cobros y cierre</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>En la demo no funcionan la impresión de comprobantes ni de QR (el visor lo bloquea); en la versión publicada en Netlify sí. Mesa Pya'e Básico · versión 1.0 de prueba.</footer>
+</div>

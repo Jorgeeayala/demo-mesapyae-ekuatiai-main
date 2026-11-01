@@ -1,0 +1,18 @@
+{
+  "name": "mesa-pyae",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mesa Pya'e — sistema de pedidos para gastronomía (Ser o Límites)",
+  "scripts": {
+    "dev": "node server/dev-server.js",
+    "test": "node --test tests/api.test.js tests/recompensas.test.js tests/planes.test.js tests/cuenta.test.js tests/locales.test.js tests/llevar.test.js tests/mesa.test.js tests/ticket.test.js tests/ekuatiai.test.js tests/gas.test.js tests/netlify.test.js tests/netlify-publicar.test.js tests/desplegar.test.js tests/e3.test.js tests/sitio.test.js tests/firebase.test.js tests/estaciones.test.js tests/stock.test.js tests/armador.test.js tests/carta-ia.test.js tests/atencion.test.js",
+    "dev:firebase": "node server/dev-server.js --backend firebase",
+    "e2e:firebase": "BACKEND=firebase node tests/e2e.js",
+    "build:firebase": "sh tools/build_firebase.sh",
+    "e2e": "node tests/e2e.js",
+    "build:gas": "sh tools/build_gas.sh",
+    "build:demo": "sh tools/build_demo.sh",
+    "e2e:ekuatiai": "node tests/e2e-ekuatiai.js",
+    "extension": "node tools/extension_local.js"
+  }
+}

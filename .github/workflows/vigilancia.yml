@@ -1,0 +1,43 @@
+# Vigilancia: respaldo diario de la base de cada local + chequeo de su servidor cada 10 minutos + correo si alguno se cae.
+# Idempotente (lo que ya existe no se toca). Se corre a mano y también solo cada lunes, para sumar los locales nuevos.
+name: vigilancia
+
+on:
+  workflow_dispatch:
+    inputs:
+      local:
+        description: "Local a vigilar (ej. lo-de-rolo) o 'todos'"
+        required: true
+        default: todos
+  schedule:
+    - cron: "17 11 * * 1"   # lunes 08:17 en Paraguay
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: vigilancia
+  cancel-in-progress: false
+
+jobs:
+  vigilancia:
+    runs-on: ubuntu-latest
+    environment: clientes
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: estable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_PROVEEDOR }}
+          service_account: ${{ vars.GCP_CUENTA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Respaldos, chequeos y alerta
+        env:
+          SOLO: ${{ inputs.local || 'todos' }}
+        run: sh tools/vigilancia.sh

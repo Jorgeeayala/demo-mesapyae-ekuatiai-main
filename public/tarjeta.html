@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5B4331">
+<title>Mi tarjeta · Tu Local Gastronómico</title>
+<link rel="icon" href="assets/logo-local.png">
+<link rel="manifest" href="tarjeta.webmanifest">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mi tarjeta">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  body.tarjeta { background: var(--crema); }
+  .tj-wrap { max-width: 440px; margin: 0 auto; padding: 18px 16px 48px; }
+  .tj-head { text-align: center; margin-bottom: 14px; }
+  .tj-head img { width: 120px; }
+  .tj-card {
+    position: relative; overflow: hidden; border-radius: 22px; padding: 20px 20px 18px; color: #fff;
+    background: radial-gradient(120% 90% at 100% 0%, #7A5C43 0%, #5B4331 55%, #3f2e22 100%);
+    box-shadow: 0 2px 4px rgba(31,27,23,.12), 0 14px 34px rgba(91,67,49,.35);
+  }
+  .tj-card::after { content: ''; position: absolute; right: -26px; bottom: -30px; width: 150px; height: 140px; background: url(assets/hoja.png) no-repeat center/contain; opacity: .14; filter: invert(1); transform: rotate(-24deg); pointer-events: none; }
+  .tj-top { display: flex; align-items: flex-start; gap: 10px; }
+  .tj-prog { font-family: var(--f-tit); text-transform: uppercase; letter-spacing: .12em; font-size: 1.05rem; line-height: 1.1; }
+  .tj-neg { font-size: .74rem; opacity: .75; letter-spacing: .06em; text-transform: uppercase; margin-top: 3px; }
+  .tj-cnt { margin-left: auto; text-align: right; font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
+  .tj-cnt b { display: block; font-family: var(--f-tit); font-size: 1.5rem; letter-spacing: .02em; opacity: 1; }
+  .tj-sellos { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 18px 0 14px; }
+  .tj-s { aspect-ratio: 1; border-radius: 50%; border: 2px dashed rgba(255,255,255,.42); display: flex; align-items: center; justify-content: center; font-family: var(--f-tit); font-size: .95rem; color: rgba(255,255,255,.6); position: relative; }
+  .tj-s.on { border: 2px solid #F5E8C8; background: #F5E8C8; color: var(--tierra-osc); }
+  .tj-s.on svg { width: 58%; height: 58%; }
+  .tj-s.premio:not(.on) { border-color: #E9C46A; color: #E9C46A; }
+  .tj-s.premio::after { content: '🎁'; position: absolute; right: -6px; top: -8px; font-size: .9rem; }
+  .tj-s.nuevo { animation: pop .7s ease-out; }
+  @keyframes pop { 0% { transform: scale(.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  .tj-prox { background: rgba(255,255,255,.1); border-radius: 12px; padding: 9px 12px; font-size: .9rem; }
+  .tj-prox b { color: #F5E8C8; }
+  .tj-tit { display: flex; gap: 14px; margin-top: 12px; font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; opacity: .8; }
+  .tj-tit div b { display: block; font-size: .95rem; text-transform: none; letter-spacing: 0; opacity: 1; font-weight: 600; margin-top: 2px; }
+  .tj-qr { background: var(--papel); border-radius: 18px; margin-top: 14px; padding: 16px; text-align: center; border: 1px solid var(--linea); }
+  .tj-qr svg { width: 190px; height: 190px; }
+  .tj-cod { font-family: var(--f-tit); font-size: 1.5rem; letter-spacing: .3em; margin-top: 4px; }
+  .tj-sec { margin-top: 18px; }
+  .tj-sec h2 { font-size: .95rem; margin-bottom: 8px; }
+  .tj-premio { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--linea); background: var(--papel); margin-bottom: 8px; }
+  .tj-premio .n { font-family: var(--f-tit); font-size: 1.1rem; min-width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--crema); }
+  .tj-premio.ok .n { background: var(--oliva); color: #fff; }
+  .tj-cupon { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--mostaza-claro); border: 1.5px dashed var(--mostaza); margin-bottom: 8px; }
+  .tj-cupon .e { font-size: 1.6rem; }
+  .tj-hist { font-size: .88rem; }
+  .tj-hist div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--linea); }
+  .tj-hero { text-align: center; padding: 6px 4px 2px; }
+  .tj-hero h1 { font-size: 1.6rem; letter-spacing: .06em; }
+  .tj-hero p { color: var(--tinta-2); margin: 6px 0 0; }
+  .tj-ladder { display: flex; gap: 8px; margin: 16px 0; }
+  .tj-ladder > div { flex: 1; text-align: center; background: var(--papel); border: 1px solid var(--linea); border-radius: 14px; padding: 12px 6px; }
+  .tj-ladder b { display: block; font-family: var(--f-tit); font-size: 1.6rem; color: var(--tierra); }
+  .tj-inst { font-size: .85rem; color: var(--tinta-2); background: var(--papel-2); border-radius: 12px; padding: 10px 12px; margin-top: 12px; }
+  footer.tj { text-align: center; font-size: .74rem; color: var(--tinta-3); margin-top: 26px; letter-spacing: .08em; text-transform: uppercase; }
+</style>
+</head>
+<body class="tarjeta">
+<div class="tj-wrap" id="app"><div class="tj-head"><img src="assets/logo-local.png" alt="Tu Local Gastronómico"></div><div class="empty">Cargando…</div></div>
+<script src="assets/config.js"></script>
+<script src="assets/lib.js"></script>
+<script src="assets/qr.js"></script>
+<script>
+(function () {
+  var M = Mesa, esc = M.esc, gs = M.gs;
+  var KEY = 'mesapyae.rec.token';
+  var ICONOS = {
+    cafe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3c0 1.5 1 1.5 1 3M12 3c0 1.5 1 1.5 1 3"/></svg>',
+    pizza: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21 3 6a15 15 0 0 1 18 0z"/><circle cx="10" cy="10" r="1.2"/><circle cx="14" cy="12" r="1.2"/><circle cx="12" cy="15.5" r="1"/></svg>',
+    estrella: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>'
+  };
+  function guardado() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  function guardar(t) { try { localStorage.setItem(KEY, t); } catch (e) { } }
+  var params = new URLSearchParams(location.search);
+  var token = (params.get('c') || '').replace(/[^a-z0-9]/g, '') || guardado();
+  var prevSellos = null;
+  try { prevSellos = JSON.parse(sessionStorage.getItem('mesapyae.rec.prev') || 'null'); } catch (e) { }
+
+  function head() { return '<div class="tj-head"><img src="assets/logo-local.png" alt="Tu Local Gastronómico"></div>'; }
+  function error(msg) { M.$('#app').innerHTML = head() + '<div class="card pad" style="text-align:center"><h2>Ups</h2><p>' + esc(msg) + '</p><a class="btn" href="tarjeta.html?nueva=1">Crear o recuperar mi tarjeta</a></div>'; }
+
+  function cargar() {
+    var pide = token && !params.get('nueva') ? { token: token } : {};
+    M.call('public.recInfo', pide, { publico: true, retries: 2 }).then(function (d) {
+      if (d.tarjeta) { guardar(d.tarjeta.token); if (!params.get('c')) history.replaceState(null, '', 'tarjeta.html?c=' + d.tarjeta.token); tarjeta(d); }
+      else alta(d.programa);
+    }, function (e) {
+      if (e.code === 'TARJETA_INVALIDA') { try { localStorage.removeItem(KEY); } catch (x) { } token = ''; return cargar(); }
+      error(e.message || 'No pudimos cargar tu tarjeta.');
+    });
+  }
+
+  function alta(P) {
+    M.$('#app').innerHTML = head() +
+      '<div class="tj-hero"><h1>' + esc(P.nombre) + '</h1><p>' + esc(P.mensaje) + '</p></div>' +
+      '<div class="tj-ladder">' + P.premios.map(function (p) { return '<div><b>' + p.sellos + '</b><span class="small">sellos</span><div style="margin-top:6px;font-weight:600">' + esc(p.nombre) + '</div></div>'; }).join('') +
+      (P.cumple ? '<div><b>🎂</b><span class="small">cumpleaños</span><div style="margin-top:6px;font-weight:600">' + esc(P.cumple) + '</div></div>' : '') + '</div>' +
+      '<div class="card pad"><h2 style="margin-bottom:8px">Sacá tu tarjeta gratis</h2>' +
+      '<label class="f" for="n">Nombre</label><input class="input" id="n" maxlength="40" autocomplete="given-name">' +
+      '<label class="f" for="c" style="margin-top:10px">Celular</label><input class="input" id="c" inputmode="tel" autocomplete="tel" placeholder="0981 123456">' +
+      '<label class="f" for="b" style="margin-top:10px">Cumpleaños (opcional)</label><input class="input" id="b" placeholder="día/mes, ej.: 15/10" maxlength="5">' +
+      '<label class="check small" style="margin-top:10px"><input type="checkbox" id="a"> Acepto que ' + esc(P.negocio) + ' guarde estos datos solo para el programa de recompensas.</label>' +
+      '<p class="small" id="e" style="color:var(--vino);min-height:1em"></p>' +
+      '<button class="btn prim big block" id="ok">Crear mi tarjeta</button>' +
+      '<p class="small muted" style="margin-bottom:0">¿Ya tenés tarjeta en otro celular? Poné el mismo nombre y número y la recuperás.</p></div>' +
+      '<p class="small muted" style="text-align:center;margin-top:14px">Sumás 1 sello por visita' + (P.minimo_gs ? ' con compra desde ' + gs(P.minimo_gs) : '') + (P.un_sello_por_dia ? ' (uno por día)' : '') + '.' + (P.vence_dias ? ' Los premios se usan dentro de ' + P.vence_dias + ' días.' : '') + '</p>' + pie();
+    M.$('#ok').onclick = function () {
+      var b = this; b.disabled = true; M.$('#e').textContent = '';
+      M.call('public.recJoin', { nombre: M.$('#n').value.trim(), celular: M.$('#c').value.trim(), cumple: M.$('#b').value.trim(), acepta: M.$('#a').checked, request_id: M.uid() }, { publico: true, retries: 1 }).then(function (r) {
+        token = r.tarjeta.token; guardar(token);
+        history.replaceState(null, '', 'tarjeta.html?c=' + token);
+        params = new URLSearchParams(location.search);
+        M.toast(r.existente ? '¡Recuperaste tu tarjeta!' : '¡Listo! Ya tenés tu tarjeta.', 'ok', 4000);
+        cargar();
+      }, function (e) { b.disabled = false; M.$('#e').textContent = e.message; });
+    };
+  }
+
+  function tarjeta(d) {
+    var P = d.programa, T = d.tarjeta, ic = ICONOS[P.icono] || ICONOS.cafe;
+    var umbrales = {}; T.premios.forEach(function (p) { umbrales[p.sellos] = p.nombre; });
+    var sellos = '';
+    for (var i = 1; i <= T.meta; i++) {
+      var on = i <= T.sellos, nuevo = on && prevSellos !== null && prevSellos.t === T.token && i > prevSellos.n;
+      sellos += '<div class="tj-s' + (on ? ' on' : '') + (umbrales[i] ? ' premio' : '') + (nuevo ? ' nuevo' : '') + '" aria-label="Sello ' + i + (on ? ' obtenido' : '') + '">' + (on ? ic : i) + '</div>';
+    }
+    try { sessionStorage.setItem('mesapyae.rec.prev', JSON.stringify({ t: T.token, n: T.sellos })); } catch (e) { }
+    var prox = T.premios.filter(function (p) { return p.sellos > T.sellos; })[0];
+    var falta = prox ? prox.sellos - T.sellos : 0;
+    var link = location.href.split('?')[0] + '?c=' + T.token;
+    M.$('#app').innerHTML = head() +
+      '<div class="tj-card"><div class="tj-top"><div><div class="tj-prog">' + esc(P.nombre) + '</div><div class="tj-neg">' + esc(P.negocio) + '</div></div>' +
+      '<div class="tj-cnt">Sellos<b>' + T.sellos + ' / ' + T.meta + '</b></div></div>' +
+      '<div class="tj-sellos">' + sellos + '</div>' +
+      (prox ? '<div class="tj-prox">Te ' + (falta === 1 ? 'falta <b>1 sello</b>' : 'faltan <b>' + falta + ' sellos</b>') + ' para: <b>' + esc(prox.nombre) + '</b></div>' : '') +
+      '<div class="tj-tit"><div>Titular<b>' + esc(T.nombre) + '</b></div><div>Visitas<b>' + T.visitas + '</b></div>' + (T.ciclos ? '<div>Tarjetas completas<b>' + T.ciclos + '</b></div>' : '') + '</div></div>' +
+      (T.cupones.length ? '<div class="tj-sec"><h2>Tus premios para usar</h2>' + T.cupones.map(function (c) {
+        return '<div class="tj-cupon"><span class="e">🎁</span><div class="grow"><strong>' + esc(c.nombre) + '</strong><div class="small muted">' + (c.vence_en ? 'Usalo antes del ' + new Date(c.vence_en).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Asuncion' }) : 'Sin vencimiento') + ' · mostrá esta pantalla en caja</div></div></div>';
+      }).join('') + '</div>' : '') +
+      '<div class="tj-qr"><div class="small muted">Mostrá este código en caja</div>' + QR.svg(link, { margin: 2 }) + '<div class="tj-cod">' + esc(T.codigo) + '</div><div class="small muted">o decí tu celular ' + esc(T.celular) + '</div></div>' +
+      '<div class="tj-sec"><h2>Premios</h2>' + T.premios.map(function (p) {
+        var ok = T.sellos >= p.sellos;
+        return '<div class="tj-premio' + (ok ? ' ok' : '') + '"><span class="n">' + p.sellos + '</span><div class="grow"><strong>' + esc(p.nombre) + '</strong><div class="small muted">' + (ok ? 'Ya lo ganaste en esta tarjeta' : 'Al llegar a ' + p.sellos + ' sellos') + '</div></div></div>';
+      }).join('') + (P.cumple ? '<div class="tj-premio"><span class="n">🎂</span><div class="grow"><strong>' + esc(P.cumple) + '</strong><div class="small muted">En la semana de tu cumpleaños' + (T.cumple ? '' : ' · avisá tu fecha en caja') + '</div></div></div>' : '') + '</div>' +
+      (d.historial.length ? '<div class="tj-sec"><h2>Últimos movimientos</h2><div class="tj-hist">' + d.historial.map(function (h) {
+        var t = { SELLO: '+1 sello', CANJE: 'Premio usado', CUMPLE: '🎂 Premio de cumpleaños', ALTA: 'Tarjeta creada', AJUSTE: 'Ajuste de sellos', REVERSO: 'Corrección' }[h.tipo] || h.tipo;
+        return '<div><span>' + esc(t) + '</span><span class="muted">' + new Date(h.fecha).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', timeZone: 'America/Asuncion' }) + '</span></div>';
+      }).join('') + '</div></div>' : '') +
+      '<div class="tj-inst"><strong>Guardala en tu celular:</strong> en iPhone tocá <em>Compartir → Agregar a inicio</em>; en Android, el menú <em>⋮ → Agregar a la pantalla principal</em>. Se abre directo en tu tarjeta.</div>' +
+      '<p class="small muted" style="text-align:center;margin-top:12px">1 sello por visita' + (P.minimo_gs ? ' con compra desde ' + gs(P.minimo_gs) : '') + (P.un_sello_por_dia ? ', uno por día' : '') + '.' + (P.vence_dias ? ' Los premios vencen a los ' + P.vence_dias + ' días.' : '') + '</p>' + pie();
+  }
+  function pie() { return '<footer class="tj"><span class="mp-pie">powered by<img src="assets/mesapyae-logo.png" alt="Mesa Pya\'e by Ser o Límites"></span></footer>'; }
+
+  cargar();
+  // Al volver a la app (después de pagar), se actualiza sola
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && token) cargar(); });
+})();
+</script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});</script>
+</body>
+</html>

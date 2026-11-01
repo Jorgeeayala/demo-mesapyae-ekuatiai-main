@@ -1,0 +1,29 @@
+{
+  "version": "ejemplo-catalogo-v1",
+  "fuente": "Carta ficticia de ejemplo (no es de ningún local real)",
+  "verificacion": "",
+  "categorias": [
+    { "categoria_id": "CAFES", "nombre": "Cafés", "orden": 1, "activa": true, "nota": "" },
+    { "categoria_id": "PLATOS", "nombre": "Platos", "orden": 2, "activa": true, "nota": "" },
+    { "categoria_id": "MENU_DIA", "nombre": "Menú del día", "orden": 3, "activa": true, "nota": "" },
+    { "categoria_id": "BEBIDAS", "nombre": "Bebidas", "orden": 4, "activa": true, "nota": "" }
+  ],
+  "grupos": [
+    { "grupo_id": "G_TAMANO", "nombre": "Tamaño", "min": 1, "max": 1, "activo": true, "nota": "", "regla": "" },
+    { "grupo_id": "G_GUARNICION", "nombre": "Guarnición", "min": 1, "max": 1, "activo": true, "nota": "", "regla": "" }
+  ],
+  "opciones": [
+    { "opcion_id": "TAM_CHICO", "grupo_id": "G_TAMANO", "nombre": "Chico", "delta_gs": 0, "activo": true, "orden": 1 },
+    { "opcion_id": "TAM_GRANDE", "grupo_id": "G_TAMANO", "nombre": "Grande", "delta_gs": 5000, "activo": true, "orden": 2 },
+    { "opcion_id": "GU_PAPAS", "grupo_id": "G_GUARNICION", "nombre": "Papas fritas", "delta_gs": 0, "activo": true, "orden": 1 },
+    { "opcion_id": "GU_ENSALADA", "grupo_id": "G_GUARNICION", "nombre": "Ensalada", "delta_gs": 0, "activo": true, "orden": 2 }
+  ],
+  "productos": [
+    { "producto_id": "CAFE_EJ", "categoria_id": "CAFES", "nombre": "Café de ejemplo", "descripcion": "", "precio_gs": 10000, "activo": true, "disponible": true, "puntos": "A_CAFE,B_TAKEAWAY", "grupos": "G_TAMANO", "orden": 1, "fuente": "Ejemplo", "validacion": "EJEMPLO", "nota": "" },
+    { "producto_id": "CAPUCHINO_EJ", "categoria_id": "CAFES", "nombre": "Capuchino de ejemplo", "descripcion": "", "precio_gs": 18000, "activo": true, "disponible": true, "puntos": "A_CAFE,B_TAKEAWAY", "grupos": "", "orden": 2, "fuente": "Ejemplo", "validacion": "EJEMPLO", "nota": "" },
+    { "producto_id": "MILA_EJ", "categoria_id": "PLATOS", "nombre": "Milanesa de ejemplo", "descripcion": "Con guarnición a elección", "precio_gs": 40000, "activo": true, "disponible": true, "puntos": "A_CAFE,B_TAKEAWAY", "grupos": "G_GUARNICION", "orden": 1, "fuente": "Ejemplo", "validacion": "EJEMPLO", "nota": "" },
+    { "producto_id": "PASTA_EJ", "categoria_id": "PLATOS", "nombre": "Pasta de ejemplo", "descripcion": "", "precio_gs": 35000, "activo": true, "disponible": true, "puntos": "A_CAFE", "grupos": "", "orden": 2, "fuente": "Ejemplo", "validacion": "EJEMPLO", "nota": "" },
+    { "producto_id": "MENU_LUN_EJ", "categoria_id": "MENU_DIA", "nombre": "Menú del lunes", "descripcion": "", "precio_gs": 30000, "activo": true, "disponible": true, "puntos": "A_CAFE", "grupos": "", "orden": 1, "fuente": "Ejemplo", "validacion": "EJEMPLO", "nota": "", "dias": "1" },
+    { "producto_id": "AGUA_EJ", "categoria_id": "BEBIDAS", "nombre": "Agua de ejemplo", "descripcion": "", "precio_gs": 6000, "activo": true, "disponible": true, "puntos": "A_CAFE,B_TAKEAWAY", "grupos": "", "orden": 1, "fuente": "Ejemplo", "validacion": "EJEMPLO", "nota": "" }
+  ]
+}

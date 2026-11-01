@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instalar e-Kuatia'i · Mesa Pya'e</title>
+<meta name="description" content="Cómo instalar en la computadora de la caja la extensión de Mesa Pya'e para facturar en e-Kuatia'i (DNIT).">
+<style>
+  :root { --crema: #F3EDE1; --papel: #FBF8F2; --tinta: #1F1B17; --tinta-2: #4A4038; --linea: #DED4C3; --tierra: #134E39; --arcilla: #C8562B; --oliva-claro: #E3EAD9; --mostaza-claro: #F5E8C8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--crema); color: var(--tinta); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.55; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 56px; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+  header img { height: 44px; }
+  h1 { font-size: 1.6rem; margin: 10px 0 4px; color: var(--tierra); }
+  .sub { color: var(--tinta-2); margin: 0 0 18px; }
+  .card { background: var(--papel); border: 1px solid var(--linea); border-radius: 14px; padding: 18px; margin: 14px 0; }
+  .paso { display: grid; grid-template-columns: 44px 1fr; gap: 12px; }
+  .num { width: 40px; height: 40px; border-radius: 50%; background: var(--tierra); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 1.1rem; }
+  h2 { font-size: 1.12rem; margin: 6px 0 6px; color: var(--tierra); }
+  p { margin: 6px 0; }
+  .shot { width: 100%; height: auto; border: 1px solid var(--linea); border-radius: 10px; margin-top: 10px; display: block; background: #fff; }
+  .shot.chica { max-width: 420px; }
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  .dos .shot { margin-top: 6px; }
+  @media (max-width: 520px) { .dos { grid-template-columns: 1fr; } }
+  .btn { display: inline-block; background: var(--arcilla); color: #fff; text-decoration: none; font-weight: 700; padding: 14px 22px; border-radius: 12px; font-size: 1.05rem; margin: 8px 0; }
+  .btn:focus-visible { outline: 3px solid var(--tierra); outline-offset: 3px; }
+  code { background: var(--oliva-claro); padding: 2px 6px; border-radius: 6px; font-size: .95em; }
+  .copiar { margin-left: 6px; border: 1px solid var(--linea); background: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: .9rem; }
+  .aviso { background: var(--mostaza-claro); border-color: #e6cf94; }
+  .ok { background: var(--oliva-claro); border-color: #c9d6b6; }
+  ul { margin: 6px 0 6px 18px; padding: 0; }
+  .muted { color: var(--tinta-2); font-size: .93rem; }
+  .win { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .win span { background: #fff; border: 1px solid var(--linea); border-radius: 8px; padding: 6px 10px; }
+  .flecha { color: var(--arcilla); font-weight: 700; }
+  @media (max-width: 520px) { .paso { grid-template-columns: 1fr; } .num { margin-bottom: -4px; } h1 { font-size: 1.35rem; } }
+</style>
+</head>
+<body>
+<main>
+  <header><img src="guia/logo.png" alt="Mesa Pya'e"></header>
+  <h1>Factura en e-Kuatia'i: instalar en la computadora de la caja</h1>
+  <p class="sub">Se hace <b>una sola vez</b>, en la computadora donde se cobra, con <b>Google Chrome</b>. Son 5 pasos y lleva unos 3 minutos.</p>
+
+  <div class="card aviso">
+    <b>Antes de empezar:</b> abrí esta página <b>en la computadora de la caja</b> y <b>en Google Chrome</b> (no en el celular). Si Chrome tiene varios perfiles, usá el mismo perfil con el que abren la caja de Mesa Pya'e.
+  </div>
+
+  <div class="card paso">
+    <div class="num">1</div>
+    <div>
+      <h2>Descargá la extensión</h2>
+      <a class="btn" href="migrador-ekuatiai.zip" download>⬇ Descargar extensión e-Kuatia'i</a>
+      <p class="muted">Se guarda en la carpeta <b>Descargas</b> con el nombre <code>migrador-ekuatiai.zip</code>.</p>
+    </div>
+  </div>
+
+  <div class="card paso">
+    <div class="num">2</div>
+    <div>
+      <h2>Descomprimí el archivo</h2>
+      <p>En la carpeta <b>Descargas</b>, hacé <b>clic derecho</b> sobre <code>migrador-ekuatiai.zip</code> → <b>"Extraer todo…"</b> → <b>"Extraer"</b>.</p>
+      <div class="win"><span>📦 migrador-ekuatiai.zip</span><span class="flecha">→ clic derecho →</span><span>Extraer todo…</span><span class="flecha">→</span><span>📁 carpeta <b>migrador-ekuatiai</b></span></div>
+      <p class="muted">En Mac: doble clic sobre el archivo y se descomprime solo.</p>
+    </div>
+  </div>
+
+  <div class="card paso">
+    <div class="num">3</div>
+    <div>
+      <h2>Abrí las extensiones de Chrome y activá el "Modo Desarrollador"</h2>
+      <p>Arriba a la derecha de Chrome, tocá el ícono de <b>Extensiones</b> (la pieza de rompecabezas 🧩) y después <b>"Gestionar extensiones"</b>.</p>
+      <div class="dos">
+        <img class="shot" src="guia/paso-icono-extensiones.png" alt="Ícono de Extensiones (pieza de rompecabezas) marcado, arriba a la derecha de Chrome">
+        <img class="shot" src="guia/paso-gestionar-extensiones.png" alt="Menú de Extensiones con la opción Gestionar extensiones marcada">
+      </div>
+      <p class="muted">Otra forma: copiá esta dirección, pegala en la barra de Chrome y apretá Enter:
+        <code id="dir">chrome://extensions</code><button class="copiar" type="button" data-copiar="chrome://extensions">Copiar</button></p>
+      <p>Arriba a la derecha, encendé <b>"Modo Desarrollador"</b>.</p>
+      <img class="shot" src="guia/paso-modo-desarrollador.png" alt="Pantalla de Extensiones de Chrome con el interruptor Modo Desarrollador marcado, arriba a la derecha">
+      <p class="muted">Si ya tenían una extensión <b>"Mesa Pya'e · Migrador e-Kuatia'i"</b> instalada, tocá <b>"Quitar"</b> en esa tarjeta antes de seguir.</p>
+    </div>
+  </div>
+
+  <div class="card paso">
+    <div class="num">4</div>
+    <div>
+      <h2>Tocá "Cargar descomprimida" y elegí la carpeta</h2>
+      <p>Tocá <b>"Cargar descomprimida"</b>, buscá en <b>Descargas</b> la carpeta que extrajiste y entrá hasta la carpeta <b>migrador-ekuatiai</b> (la que tiene adentro el archivo <code>manifest.json</code>). Tocá <b>"Seleccionar carpeta"</b>.</p>
+      <img class="shot" src="guia/paso-cargar-descomprimida.png" alt="Botón Cargar descomprimida marcado, arriba a la izquierda de la pantalla de Extensiones">
+      <p class="muted"><b>No borres esa carpeta después:</b> Chrome la usa. Si querés, movela antes a <b>Documentos</b> y cargala desde ahí.</p>
+    </div>
+  </div>
+
+  <div class="card paso">
+    <div class="num">5</div>
+    <div>
+      <h2>Listo: comprobá que quedó instalada</h2>
+      <p>Tiene que aparecer la tarjeta <b>"Mesa Pya'e · Migrador e-Kuatia'i"</b> con el interruptor encendido.</p>
+      <img class="shot chica" src="guia/paso-instalada.png" alt="Tarjeta de la extensión Mesa Pya'e · Migrador e-Kuatia'i instalada y encendida">
+      <p>Volvé a la caja de Mesa Pya'e y <b>recargá la página</b> (tecla F5).</p>
+    </div>
+  </div>
+
+  <div class="card ok">
+    <h2>Cómo se usa todos los días</h2>
+    <ul>
+      <li>Cobrá normalmente y elegí <b>Factura</b> (RUC o CI y razón social).</li>
+      <li>En <b>Caja → Turno y cierre</b>, ese cobro muestra el botón <b>🧾 e-Kuatia'i</b>. Tocalo.</li>
+      <li>Se abre el portal e-Kuatia'i de la DNIT con la factura ya completada. Iniciá sesión si te lo pide, revisá, ingresá <b>tu PIN</b> y emití.</li>
+    </ul>
+    <p class="muted">La extensión nunca escribe tu PIN ni emite sola, y no envía datos a ningún servidor. <a href="privacidad.html">Política de privacidad</a>.</p>
+  </div>
+
+  <div class="card">
+    <h2>¿No aparece el botón 🧾?</h2>
+    <ul>
+      <li>Revisá que estás en <b>Google Chrome</b> y en el <b>mismo perfil</b> donde la instalaste.</li>
+      <li>Recargá la caja con <b>F5</b>.</li>
+      <li>El botón solo aparece en cobros hechos con <b>Factura</b>.</li>
+      <li>Si sigue sin aparecer, escribinos y te ayudamos.</li>
+    </ul>
+  </div>
+  <p class="muted" style="text-align:center">Mesa Pya'e · by Ser o Límites</p>
+</main>
+<script>
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-copiar]'); if (!b) return;
+    var t = b.getAttribute('data-copiar');
+    try { navigator.clipboard.writeText(t).then(function () { b.textContent = 'Copiado ✓'; setTimeout(function () { b.textContent = 'Copiar'; }, 2000); }); } catch (err) { /* sin portapapeles: se copia a mano */ }
+  });
+</script>
+</body>
+</html>

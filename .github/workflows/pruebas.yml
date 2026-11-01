@@ -1,0 +1,35 @@
+# Pruebas automáticas de Mesa Pya'e: corren en cada pull request y en cada cambio de main y estable.
+# Cuando las ramas estén protegidas, "pruebas" es el chequeo obligatorio para unir.
+name: pruebas
+on:
+  pull_request:
+  push:
+    branches: [main, estable]
+permissions:
+  contents: read
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pruebas de API (npm test)
+        run: npm test
+      - name: Validar cada local de la matriz
+        run: |
+          for d in locales/*/; do
+            l=$(basename "$d"); [ -f "$d/local.json" ] || continue
+            node tools/validar_local.js "$l"
+          done
+      - name: Instalar navegador para pruebas e2e
+        run: npm install --no-save playwright@1 && npx playwright install --with-deps chromium
+      - name: Prueba en navegador (flujo completo)
+        run: node tests/e2e.js
+      - name: Prueba en navegador (local de la matriz)
+        run: node tests/e2e-local.js

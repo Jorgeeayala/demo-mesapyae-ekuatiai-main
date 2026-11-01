@@ -1,0 +1,30 @@
+{
+  "_nota": "Local de EJEMPLO (ficticio) de la matriz de Mesa Pya'e. Sirve de plantilla y para las pruebas. No es un cliente real.",
+  "slug": "ejemplo",
+  "nombre": "Bistró del Ejemplo",
+  "nombre_corto": "Bistró Ejemplo",
+  "direccion": "Av. de los Ejemplos 1234 · Asunción",
+  "plan": "GOLD",
+  "colores": { "principal": "#2F5D62", "secundario": "#C8553D" },
+  "mesas": 12,
+  "puntos": {
+    "salon": { "nombre": "Salón principal", "corto": "Salón" },
+    "para_llevar": { "activo": true, "nombre": "Para llevar (mostrador)", "corto": "Para llevar", "lugar": "el mostrador" }
+  },
+  "cajas": { "A": "Caja 01 — Salón", "B": "Caja 02 — Para llevar" },
+  "config": {
+    "medios_pago": "EFECTIVO,TRANSFERENCIA,TC,TD",
+    "cuenta_qr_habilitada": "SI"
+  },
+  "sitio": {
+    "api_url": "https://southamerica-east1-ejemplo-mesapyae.cloudfunctions.net/api",
+    "firebase": { "projectId": "", "apiKey": "", "appId": "" }
+  },
+  "empresa": { "razon_social": "Ejemplo S.A.", "ruc": "80000000-0" },
+  "equipo": [
+    { "nombre": "Ana Ejemplo", "rol": "ADMIN" },
+    { "nombre": "Bruno Ejemplo", "rol": "MOZO" },
+    { "nombre": "Carla Ejemplo", "rol": "COCINA" },
+    { "nombre": "Diego Ejemplo", "rol": "CAJA", "caja": "A" }
+  ]
+}

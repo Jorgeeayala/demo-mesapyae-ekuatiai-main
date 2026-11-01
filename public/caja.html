@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3EDE1">
+<title>Caja · Mesa Pya'e · Tu Local</title>
+<link rel="icon" href="assets/logo-local.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tu Local">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .print-only { display: none; }
+  @media print { .print-only { display: block; } #main > :not(.print-only) { display: none !important; } }
+  .pago-line { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 8px; }
+  .medios { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="assets/config.js"></script>
+<script src="assets/lib.js"></script>
+<script src="assets/realtime.js"></script>
+<script src="assets/composer.js"></script>
+<script src="assets/comandas.js"></script>
+<script src="assets/qr.js"></script>
+<script src="assets/rec.js"></script>
+<script src="assets/facturador.js"></script>
+<script>
+(function () {
+  var M = Mesa, esc = M.esc, gs = M.gs;
+  var params = new URLSearchParams(location.search);
+  var S = { caja: null, punto: null, data: null, estado: null, vista: 'cobrar', menu: null, rev: -1, conocidos: null, sync: null };
+  var CAJAS = { CAJA_A: { nombre: 'Caja 01 — Salón', punto: 'A_CAFE' }, CAJA_B: { nombre: 'Caja 02 — Para llevar', punto: 'B_TAKEAWAY' } };
+
+  M.staffPage({ modulo: 'Caja', roles: ['ADMIN', 'CAJA'], render: start });
+
+  function start(s) {
+    var u = s.usuario;
+    S.caja = u.rol === 'CAJA' ? u.caja_id : (params.get('caja') || 'CAJA_A');
+    if (!CAJAS[S.caja]) S.caja = 'CAJA_A';
+    if (u.rol === 'CAJA' && params.get('caja') && params.get('caja') !== u.caja_id) M.toast('Tu usuario opera ' + CAJAS[S.caja].nombre + '.', '', 5000);
+    S.punto = CAJAS[S.caja].punto;
+    document.title = CAJAS[S.caja].nombre + ' · Mesa Pya\'e';
+    document.getElementById('app').innerHTML = M.topbar(CAJAS[S.caja].nombre,
+      (u.rol === 'ADMIN' ? '<select class="input" id="sel-caja" style="width:auto;min-height:36px"><option value="CAJA_A">Caja 01</option>' + ((window.MESA_LOCAL && window.MESA_LOCAL.sinTakeaway) ? '' : '<option value="CAJA_B">Caja 02</option>') + '</select>' : '') +
+      '<button class="btn small" id="snd">🔔 Sonido</button>') + '<main id="main"><div class="empty">Cargando…</div></main>';
+    if (M.$('#sel-caja')) { M.$('#sel-caja').value = S.caja; M.$('#sel-caja').onchange = function () { location.href = 'caja.html?caja=' + this.value; }; }
+    M.soundToggle(M.$('#snd'));
+    M.call('menu', { punto_id: S.punto }, { retries: 2 }).then(function (m) { S.menu = m; });
+    M.$('#main').addEventListener('click', onClick);
+    S.sync = M.syncLoop(onData, { ms: 4000 });
+    setInterval(function () { M.tickElapsed(10, 20); }, 20000);
+    // e-Kuatia'i: solo si este navegador tiene instalada la extensión Migrador (si no, la caja queda igual que siempre).
+    Facturador.detectar().then(function (x) { S.ekuatiai = x; if (S.estado && S.vista !== 'venta' && (x || ekuatiaiContratado())) render(); });
+    setInterval(function () { M.revisarAlertasLlevar(S.llevar); var b = M.$('[data-banner-llevar]'); if (b) b.outerHTML = M.bannerLlevar(S.llevar); }, 15000);
+  }
+
+  function onData(d) {
+    var claves = {};
+    d.pedidos.forEach(function (p) { if (p.caja_id === S.caja && (p.estado === 'LISTO' || p.estado === 'PENDIENTE')) claves[p.pedido_id + p.estado] = 1; });
+    d.cuentas.forEach(function (c) { if (c.caja_id === S.caja && c.estado === 'CIERRE_SOLICITADO') claves[c.cuenta_id + 'C'] = 1; });
+    var nuevas = S.conocidos ? Object.keys(claves).filter(function (k) { return !S.conocidos[k]; }) : [];
+    if (nuevas.length) M.beep(2);
+    d.cuentas.forEach(function (c) { if (nuevas.indexOf(c.cuenta_id + 'C') >= 0 && c.cierre_pedido && c.cierre_pedido.origen === 'CLIENTE') M.toast('📱 ' + (c.mesa || 'Una mesa') + ' pidió la cuenta' + (c.comprobante && c.comprobante.tipo === 'FACTURA' ? ' con factura' : '') + '.', 'ok', 9000); });
+    S.conocidos = claves;
+    S.data = d;
+    S.llevar = M.avisosLlevar(d, S.llevar);
+    if (S.menu) { var disp = {}; d.disponibilidad.forEach(function (x) { disp[x.id] = x.disponible; }); S.menu.productos.forEach(function (p) { if (disp[p.id] !== undefined) p.disponible = disp[p.id]; }); }
+    cargarEstado().then(function () {
+      if (S.vista !== 'venta') render();
+      if (S.pendienteCobro && S.estado && S.estado.turno && d.cuentas.some(function (c) { return c.cuenta_id === S.pendienteCobro && c.pago_estado !== 'COBRADO'; })) {
+        var id = S.pendienteCobro; S.pendienteCobro = null; cobrar(id);
+      } else if (S.pendienteCobro && !(S.estado && S.estado.turno)) { S.pendienteCobro = null; M.toast('Abrí la caja para cobrar.', 'error'); }
+    });
+  }
+  function cargarEstado() {
+    return M.call('caja.estado', { caja_id: S.caja }).then(function (e) { S.estado = e; }, function (e) { if (!e.red) M.toast(e.message, 'error'); });
+  }
+
+  function cuentas() {
+    return S.data.cuentas.filter(function (c) { return c.caja_id === S.caja && (c.estado === 'ABIERTA' || c.estado === 'CIERRE_SOLICITADO') && c.total_gs > 0; })
+      .sort(function (a, b) { if (a.estado !== b.estado) return a.estado === 'CIERRE_SOLICITADO' ? -1 : 1; return a.abierta_en < b.abierta_en ? -1 : 1; });
+  }
+  function pedidosCaja() { return S.data.pedidos.filter(function (p) { return p.caja_id === S.caja; }); }
+
+  function render() {
+    if (!S.data || !S.estado) return;
+    var t = S.estado.turno, cs = cuentas(), ps = pedidosCaja();
+    var accionables = ps.filter(function (p) { return p.estado === 'PENDIENTE' || p.estado === 'LISTO'; }).length;
+    var html = M.bannerLlevar(S.llevar) + '<div class="row wrap" style="margin-bottom:12px">' +
+      (t ? '<span class="chip oliva">Turno abierto · ' + M.hora(t.abierto_en) + ' · ' + esc(t.abierto_por) + '</span><span class="chip">Ventas del turno: <strong class="num">&nbsp;' + gs(t.totales.ventas_netas_gs) + '</strong></span>'
+        : '<span class="chip vino">Caja cerrada</span>') + '</div>';
+    html += '<div class="tabs" style="margin-bottom:14px">' + tab('cobrar', 'Por cobrar', cs.length) + tab('pedidos', 'Pedidos', accionables) +
+      tab('venta', S.punto === 'B_TAKEAWAY' ? 'Nueva venta' : 'Venta mostrador') + tab('turno', 'Turno y cierre') + tab('cierres', 'Cierres anteriores') + '</div>';
+    if (!t && (S.vista === 'cobrar' || S.vista === 'turno')) html += abrirHtml();
+    else if (S.vista === 'cobrar') html += cs.length ? '<div class="grid2">' + cs.map(cuentaCard).join('') + '</div>' : '<div class="empty">No hay cuentas pendientes de cobro en esta caja.</div>';
+    if (S.vista === 'pedidos') html += pedidosHtml(ps);
+    if (S.vista === 'turno' && t) html += turnoHtml(t);
+    if (S.vista === 'cierres') html += cierresHtml();
+    M.$('#main').innerHTML = html;
+  }
+  function tab(id, t, n) { return '<button class="tab' + (S.vista === id ? ' on' : '') + '" data-tab="' + id + '">' + esc(t) + (n ? '<span class="badge">' + n + '</span>' : '') + '</button>'; }
+
+  function abrirHtml() {
+    return '<div class="card pad" style="max-width:420px"><h2>Abrir caja</h2><p class="muted">Contá el fondo de efectivo con el que empieza el turno.</p>' +
+      '<label class="f">Fondo inicial en efectivo (Gs.)</label><input class="input num" id="fondo" inputmode="numeric" placeholder="0">' +
+      '<button class="btn prim big block" style="margin-top:12px" data-abrir>Abrir turno</button></div>';
+  }
+  function cuentaCard(c) {
+    var ps = S.data.pedidos.filter(function (p) { return p.cuenta_id === c.cuenta_id && p.estado !== 'CANCELADO'; });
+    var sinEntregar = ps.filter(function (p) { return p.estado !== 'ENTREGADO'; }).length;
+    return '<div class="card pad"><div class="row"><h2 class="grow">' + (c.mesa ? esc(c.mesa) : (c.punto_id === 'B_TAKEAWAY' || S.punto === 'B_TAKEAWAY' ? 'Para llevar' : 'Mostrador') + (c.alias ? ' · ' + esc(c.alias) : '')) + '</h2>' +
+      (c.estado === 'CIERRE_SOLICITADO' ? '<span class="chip mostaza">Pidió la cuenta</span>' : '') + M.comprobanteChip(c.comprobante) + M.pagoChip(c.pago_estado) + '</div>' +
+      (c.cliente ? '<div class="small" style="margin-top:2px"><span class="chip rec">' + esc((Rec.ICON[(S.data.recompensas || {}).icono] || '☕') + ' ' + c.cliente.nombre + ' · ' + c.cliente.sellos + '/' + c.cliente.meta) + '</span>' + (c.cliente.cupones ? ' <span class="chip oliva">🎁 premio disponible</span>' : '') + '</div>' : '') +
+      (c.comprobante && c.comprobante.tipo === 'FACTURA' ? '<div class="small" style="margin-top:2px">Factura a <strong>' + esc(c.comprobante.razon) + '</strong> · RUC/CI ' + esc(c.comprobante.ruc) + (c.comprobante.email ? ' · ' + esc(c.comprobante.email) : '') + '</div>' : '') +
+      M.cierreTxt(c) +
+      (c.whatsapp ? '<div class="small" style="margin-top:2px">📱 ' + esc(M.waTxt(c.whatsapp)) + (c.acepta_promos ? ' <span class="chip oliva">Acepta promociones</span>' : '') + '</div>' : '') +
+      '<div class="small muted">' + ps.map(function (p) { return esc(p.numero) + ' (' + M.ESTADO_TXT[p.estado] + ')'; }).join(' · ') + '</div>' +
+      (sinEntregar ? '<div class="small" style="color:#7a5a14;margin-top:4px">' + sinEntregar + ' comanda(s) aún no entregada(s).</div>' : '') +
+      (c.personas ? '<div class="personas-box" style="margin:8px 0 0">' + c.personas.personas.map(function (x) { return '<span class="persona-t' + (x.pago && !x.pendiente_gs ? ' ok' : '') + '"><b>' + esc(x.nombre) + '</b><span class="num">' + gs(x.pendiente_gs) + '</span>' + (x.pago && !x.pendiente_gs ? ' · pagó' : '') + '</span>'; }).join('') +
+        (c.personas.compartido.pendiente_gs ? '<span class="persona-t"><b>Compartido</b><span class="num">' + gs(c.personas.compartido.pendiente_gs) + '</span></span>' : '') + '</div>' : '') +
+      '<div class="row" style="margin-top:10px"><span class="total-row grow">' + (c.pagado_gs ? 'Pendiente' : 'Total') + ' <span class="num">' + gs(c.total_gs - (c.pagado_gs || 0)) + '</span></span>' +
+      '<button class="btn prim big" data-cobrar="' + esc(c.cuenta_id) + '">Cobrar</button></div></div>';
+  }
+  function pedidosHtml(ps) {
+    var pend = ps.filter(function (p) { return p.estado === 'PENDIENTE'; }), listos = ps.filter(function (p) { return p.estado === 'LISTO'; });
+    var curso = ps.filter(function (p) { return p.estado === 'ACEPTADO' || p.estado === 'EN_PREPARACION'; });
+    var hechos = ps.filter(function (p) { return p.estado === 'ENTREGADO' || p.estado === 'CANCELADO'; }).slice(-15).reverse();
+    var sec = function (t, list, acc, vacio) {
+      return '<div class="section-h"><h2>' + t + '</h2><span class="badge' + (list.length ? '' : ' zero') + '">' + list.length + '</span></div>' +
+        (list.length ? '<div class="grid2">' + list.map(function (p) { return Comandas.ticket(p, { acciones: acc, anularItems: acc.length > 0 }); }).join('') + '</div>' : '<div class="empty">' + vacio + '</div>');
+    };
+    return sec('Listos para entregar', listos, ['entregar'], 'Nada listo por ahora.') +
+      sec('Por aceptar (QR)', pend, ['aceptar', 'rechazar'], 'Sin pedidos QR por aceptar.') +
+      sec('En cocina', curso, ['cancelar'], 'Nada en cocina.') +
+      sec('Entregados / cancelados hoy', hechos, [], 'Sin movimientos todavía.');
+  }
+  function turnoHtml(t) {
+    var tot = t.totales, e = S.estado;
+    var medios = Object.keys(tot.por_medio);
+    return '<div class="kpis">' +
+      kpi('Ventas netas', gs(tot.ventas_netas_gs)) + kpi('Cobros', tot.cantidad_cobros) + kpi('Fondo inicial', gs(t.monto_inicial_gs)) +
+      kpi('Efectivo esperado', gs(tot.efectivo_esperado_gs)) + '</div>' +
+      '<div class="grid2" style="margin-top:14px"><div class="card pad"><h2>Por medio de pago</h2><table class="tbl" style="margin-top:8px"><tbody>' +
+      (medios.length ? medios.map(function (m) { return '<tr><td>' + esc(M.medioTxt(m)) + '</td><td class="r num">' + gs(tot.por_medio[m]) + '</td></tr>'; }).join('') : '<tr><td class="muted">Sin cobros todavía.</td></tr>') +
+      '<tr><td>Ingresos de efectivo</td><td class="r num">' + gs(tot.ingresos_gs) + '</td></tr><tr><td>Egresos de efectivo</td><td class="r num">' + gs(tot.egresos_gs) + '</td></tr></tbody></table>' +
+      '<div class="row wrap" style="margin-top:12px"><button class="btn" data-mov="INGRESO">+ Ingreso de efectivo</button><button class="btn" data-mov="EGRESO">− Egreso (requiere encargado)</button></div></div>' +
+      '<div class="card pad"><h2>Cerrar caja</h2><p class="muted small">Contá el efectivo del cajón. El sistema calcula la diferencia contra lo esperado.</p>' +
+      '<label class="f">Efectivo contado (Gs.)</label><input class="input num" id="decl" inputmode="numeric" placeholder="0">' +
+      '<div id="dif" class="small" style="margin:6px 0;min-height:1.2em"></div>' +
+      '<label class="f">Observación</label><textarea class="input" id="obs" maxlength="300" placeholder="Obligatoria si hay diferencia"></textarea>' +
+      '<button class="btn prim big block" style="margin-top:10px" data-cerrar>Cerrar turno</button></div></div>' +
+      (ekuatiaiContratado() && S.ekuatiai === null ? '<div class="banner" id="ekuatiai-instalar" style="border-radius:10px;margin:14px 0 0">🧾 <b>Factura en e-Kuatia\'i:</b> este local lo tiene contratado, pero esta computadora todavía no tiene la extensión. ' +
+        '<a class="btn small prim" href="' + esc(Facturador.instalarUrl()) + '" target="_blank" rel="noopener">Instalar extensión</a> <span class="small muted">Se instala una sola vez en el Chrome de esta caja. Después, recargá esta página.</span></div>' : '') +
+      '<div class="section-h"><h2>Cobros del turno</h2></div>' +
+      (e.cobros.length ? '<div class="tbl-wrap card"><table class="tbl"><thead><tr><th>Hora</th><th>Cuenta</th><th>Pagos</th><th class="r">Desc.</th><th class="r">Total</th><th>Estado</th><th></th></tr></thead><tbody>' +
+        e.cobros.slice().reverse().map(function (c) {
+          return '<tr><td>' + M.hora(c.fecha) + '</td><td>' + esc(cuentaLabel(c.cuenta_id)) + '<div class="small muted">' + esc(c.usuario_id) + '</div>' + (c.comprobante && c.comprobante.tipo === 'FACTURA' ? '<div class="small"><span class="chip azul">Factura</span> ' + esc(c.comprobante.ruc) + ' · ' + esc(c.comprobante.razon) + '</div>' : '') + '</td><td>' + c.pagos.map(function (p) { return esc(M.medioTxt(p.medio)) + ' ' + gs(p.monto_gs); }).join('<br>') + '</td>' +
+            '<td class="r num">' + (c.descuento_gs ? gs(c.descuento_gs) + '<div class="small muted">' + esc([c.motivo_descuento, c.recompensa && c.recompensa.descuento_gs ? '🎁 premio' : ''].filter(Boolean).join(' · ')) + '</div>' : '—') + (c.recompensa ? '<div class="small">' + esc(c.recompensa.nombre) + (c.recompensa.sello ? ' +1' : '') + '</div>' : '') + '</td><td class="r num"><strong>' + gs(c.total_gs) + '</strong></td>' +
+            '<td>' + (c.estado === 'VALIDO' ? '<span class="chip oliva">Válido</span>' : '<span class="chip vino">Revertido</span><div class="small">' + esc(c.motivo_reverso) + '</div>') + '</td>' +
+            '<td>' + (c.estado === 'VALIDO' ? '<button class="btn small" data-print="' + esc(c.cobro_id) + '">Comprobante</button> ' + (S.ekuatiai && ekuatiaiContratado() && c.comprobante && c.comprobante.tipo === 'FACTURA' ? '<button class="btn small prim" data-ekuatiai="' + esc(c.cobro_id) + '" title="Cargar esta factura en e-Kuatia\'i (DNIT)">🧾 e-Kuatia\'i</button> ' : '') + '<button class="btn small danger" data-revertir="' + esc(c.cobro_id) + '">Revertir</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">Sin cobros en este turno.</div>');
+  }
+  function cuentaLabel(id) {
+    var c = S.data.cuentas.filter(function (x) { return x.cuenta_id === id; })[0];
+    if (!c) return id.slice(-6);
+    return c.mesa || ((c.punto_id === 'B_TAKEAWAY' || S.punto === 'B_TAKEAWAY' ? 'Para llevar' : 'Mostrador') + (c.alias ? ' · ' + c.alias : ''));
+  }
+  function kpi(l, v) { return '<div class="card kpi"><div class="l">' + esc(l) + '</div><div class="v num">' + esc(v) + '</div></div>'; }
+  function cierresHtml() {
+    var cs = S.estado.cierres;
+    return cs.length ? '<div class="tbl-wrap card"><table class="tbl"><thead><tr><th>Apertura</th><th>Cierre</th><th>Responsable</th><th class="r">Ventas netas</th><th class="r">Esperado</th><th class="r">Contado</th><th class="r">Diferencia</th><th>Obs.</th></tr></thead><tbody>' +
+      cs.map(function (t) {
+        return '<tr><td>' + M.fechaHora(t.abierto_en) + '</td><td>' + M.fechaHora(t.cerrado_en) + '</td><td>' + esc(t.cerrado_por) + '</td><td class="r num">' + gs(t.totales.ventas_netas_gs) + '</td>' +
+          '<td class="r num">' + gs(t.esperado_efectivo_gs) + '</td><td class="r num">' + gs(t.declarado_efectivo_gs) + '</td><td class="r num" style="color:' + (t.diferencia_gs ? 'var(--vino)' : 'var(--oliva)') + '"><strong>' + gs(t.diferencia_gs) + '</strong></td><td class="small">' + esc(t.observacion) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="empty">Todavía no hay cierres en esta caja.</div>';
+  }
+
+  // ------------------------------------------------------------ acciones
+  function onClick(e) {
+    var t;
+    if ((t = e.target.closest('[data-tab]'))) { S.vista = t.getAttribute('data-tab'); if (S.vista === 'venta') return venta(); render(); return; }
+    if (e.target.closest('[data-abrir]')) {
+      var monto = M.parseGs(M.$('#fondo').value);
+      M.confirmar('Abrir turno', 'Fondo inicial: ' + gs(monto) + '. ¿Confirmás?', 'Abrir').then(function (ok) {
+        if (ok) M.call('caja.abrir', { caja_id: S.caja, monto_inicial_gs: monto }).then(function () { M.toast('Caja abierta.', 'ok'); S.vista = 'cobrar'; S.sync.now(); }, err);
+      });
+      return;
+    }
+    if ((t = e.target.closest('[data-cobrar]'))) { cobrar(t.getAttribute('data-cobrar')); return; }
+    if ((t = e.target.closest('[data-revertir]'))) {
+      var id = t.getAttribute('data-revertir');
+      M.pedirMotivo('Revertir cobro', { auth: true, ok: 'Revertir', texto: 'El cobro se anula con un movimiento negativo en este turno y la cuenta vuelve a quedar pendiente. Requiere encargado.' }).then(function (r) {
+        if (r) M.call('caja.revertir', { cobro_id: id, motivo: r.motivo, autorizacion: r.autorizacion }).then(function () { M.toast('Cobro revertido.', 'ok'); S.sync.now(); }, err);
+      });
+      return;
+    }
+    if ((t = e.target.closest('[data-print]'))) { imprimir(t.getAttribute('data-print')); return; }
+    if ((t = e.target.closest('[data-ekuatiai]'))) { facturarEkuatiai(t.getAttribute('data-ekuatiai'), false); return; }
+    if ((t = e.target.closest('[data-mov]'))) { movimiento(t.getAttribute('data-mov')); return; }
+    if (e.target.closest('[data-cerrar]')) { cerrar(); return; }
+    Comandas.handleClick(e, function () { S.sync.refresh(); });
+  }
+  M.$('#app').addEventListener('input', function (e) {
+    if (e.target.id === 'decl' && S.estado && S.estado.turno) {
+      var dif = M.parseGs(e.target.value) - S.estado.turno.totales.efectivo_esperado_gs;
+      M.$('#dif').innerHTML = e.target.value ? 'Diferencia: <strong style="color:' + (dif ? 'var(--vino)' : 'var(--oliva)') + '">' + gs(dif) + '</strong>' + (dif > 0 ? ' (sobrante)' : dif < 0 ? ' (faltante)' : ' (cuadra)') : '';
+    }
+  });
+
+  function cobrar(cuentaId) {
+    var c = S.data.cuentas.filter(function (x) { return x.cuenta_id === cuentaId; })[0];
+    var ps = S.data.pedidos.filter(function (p) { return p.cuenta_id === cuentaId && p.estado !== 'CANCELADO'; });
+    var medios = S.estado.medios_pago, reqId = M.uid(), esAdmin = M.session.usuario.rol === 'ADMIN';
+    // Sub-cuentas: se cobra todo lo pendiente o las personas elegidas + su parte de lo compartido (misma regla que el servidor)
+    var D = c.personas, pendTotal = c.total_gs - (c.pagado_gs || 0);
+    var sp = { modo: 'TODO_PEND', sel: {}, comp: 'IGUALES' };
+    function parte() {
+      if (!D || sp.modo === 'TODO_PEND') return pendTotal;
+      var ids = Object.keys(sp.sel).filter(function (k) { return sp.sel[k]; }); if (!ids.length) return 0;
+      var m = 0; D.personas.forEach(function (x) { if (sp.sel[x.id]) m += x.pendiente_gs; });
+      var faltan = D.personas.filter(function (x) { return x.pendiente_gs > 0 || !x.pago || sp.sel[x.id]; }).length;
+      var comp = D.compartido.pendiente_gs;
+      m += sp.comp === 'TODO' ? comp : sp.comp === 'NADA' ? 0 : (ids.length >= faltan ? comp : Math.floor(comp * ids.length / faltan / 100) * 100);
+      return m;
+    }
+    var sub = parte();
+    // Si el cliente ya dijo cómo paga desde su celular, el cobro arranca con ese medio y el efectivo que trae
+    var pc = c.estado === 'CIERRE_SOLICITADO' && c.cierre_pedido && c.cierre_pedido.origen === 'CLIENTE' ? c.cierre_pedido : null;
+    var medio0 = pc && medios.indexOf(pc.medio) >= 0 ? pc.medio : medios[0];
+    var st = { desc: 0, lines: [{ medio: medio0, monto: sub }], recibido: pc && pc.medio === 'EFECTIVO' && pc.paga_con ? String(pc.paga_con) : '' };
+    var subHtml = D ? '<h3 style="margin:6px 0">¿Qué se cobra?</h3><div class="seg" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+      '<label class="opt grow on"><input type="radio" name="sp_modo" value="TODO_PEND" checked> <span class="grow">Todo lo pendiente</span></label>' +
+      '<label class="opt grow"><input type="radio" name="sp_modo" value="PERSONAS"> <span class="grow">Por persona</span></label></div>' +
+      '<div data-sp class="hidden card pad" style="background:var(--papel-2);margin-bottom:10px">' +
+      D.personas.map(function (x) {
+        var saldada = x.pago && !x.pendiente_gs;
+        return '<label class="check"><input type="checkbox" data-spp="' + esc(x.id) + '"' + (saldada ? ' disabled' : '') + '> ' + esc(x.nombre) + ' · <span class="num">' + gs(x.pendiente_gs) + '</span>' + (saldada ? ' <span class="chip oliva">pagó</span>' : '') + '</label>';
+      }).join('') +
+      (D.compartido.pendiente_gs ? '<div class="f" style="margin-top:8px">Lo compartido pendiente: <span class="num">' + gs(D.compartido.pendiente_gs) + '</span></div>' +
+        '<label class="check"><input type="radio" name="sp_comp" value="IGUALES" checked> Partes iguales entre quienes faltan pagar</label>' +
+        '<label class="check"><input type="radio" name="sp_comp" value="TODO"> Sumar todo lo compartido a este cobro</label>' +
+        '<label class="check"><input type="radio" name="sp_comp" value="NADA"> No incluir lo compartido</label>' : '') + '</div>' : '';
+    var detalle = ps.map(function (p) {
+      return '<div class="small" style="margin-bottom:6px"><strong>' + esc(p.numero) + '</strong> · ' + M.ESTADO_TXT[p.estado] + '<br>' +
+        p.items.filter(function (i) { return !i.anulado; }).map(function (i) { return i.cantidad + '× ' + esc(i.nombre) + (i.opciones ? ' <span class="muted">(' + esc(i.opciones) + ')</span>' : '') + ' — ' + gs(i.total_gs); }).join('<br>') + '</div>';
+    }).join('');
+    var m = M.modal({
+      title: 'Cobrar · ' + cuentaLabel(cuentaId), wide: true, noFocus: true,
+      body: '<details><summary class="small" style="cursor:pointer">Ver detalle (' + ps.length + ' comanda/s)</summary><div style="margin-top:8px">' + detalle + '</div></details>' +
+        subHtml + '<div class="total-row"><span>Subtotal</span><span class="num" data-sub>' + gs(sub) + '</span></div>' +
+        '<label class="check"><input type="checkbox" data-hasdesc> Aplicar descuento' + (esAdmin ? '' : ' (requiere encargado)') + '</label>' +
+        '<div data-desc class="hidden card pad" style="background:var(--papel-2);margin-bottom:10px"><div class="row"><div class="grow"><label class="f">Descuento (Gs.)</label><input class="input num" data-dm inputmode="numeric"></div>' +
+        '<div class="grow"><label class="f">Motivo</label><input class="input" data-dmot maxlength="200"></div></div>' +
+        (esAdmin ? '' : '<div class="row" style="margin-top:8px"><input class="input" data-au placeholder="Usuario encargado" autocomplete="off"><input class="input" data-ap type="password" inputmode="numeric" placeholder="PIN encargado" autocomplete="off"></div>') + '</div>' +
+        (S.data.recompensas ? '<div class="card pad rec-box" style="margin:8px 0 10px"><h3 style="margin:0 0 6px">' + (Rec.ICON[S.data.recompensas.icono] || '☕') + ' ' + esc(S.data.recompensas.nombre) + '</h3><div data-rec></div></div>' : '') +
+        '<div class="total-row" data-recdesc-row style="display:none"><span>Premios canjeados</span><span class="num" data-recdesc></span></div>' +
+        '<div class="total-row" style="font-size:1.4rem"><span>Total a cobrar</span><span class="num" data-tot></span></div>' +
+        '<h3 style="margin:10px 0 6px">Comprobante</h3>' + M.comprobanteForm(c.comprobante) +
+        '<h3 style="margin:12px 0 4px">Pago</h3><p class="small muted" style="margin:0 0 8px">Si paga con QR del POS, elegí TC o TD según la tarjeta del cliente.</p><div data-lines></div>' +
+        '<button class="btn small" data-addline>+ Dividir en otro medio</button>' +
+        '<div data-ef class="card pad" style="margin-top:10px;background:var(--papel-2)"><div class="row"><div class="grow"><label class="f">Efectivo recibido (para calcular vuelto)</label><input class="input num" data-rec inputmode="numeric" value="' + (st.recibido ? M.gs(+st.recibido).replace('Gs. ', '') : '') + '"></div><div class="grow"><div class="f">Vuelto</div><div class="total-row num" data-vuelto>—</div></div></div></div>' +
+        '<p class="small" data-err style="color:var(--vino);min-height:1em"></p>',
+      foot: '<button class="btn grow" data-x>Volver</button><button class="btn prim big grow" data-ok>Confirmar cobro</button>'
+    });
+    M.comprobanteBind(m.el);
+    var items = []; ps.forEach(function (p) { p.items.forEach(function (i) { if (!i.anulado) items.push(i); }); });
+    var rec = { activo: false, desc: 0 };
+    var panel = S.data.recompensas ? Rec.panelCobro(m.el, {
+      programa: S.data.recompensas, items: items, menu: S.menu, vinculado: c.cliente ? c.cliente.codigo : '',
+      onChange: function (e) { rec = e; rebalance(); paint(); }
+    }) : null;
+    function recDesc() { return Math.min(rec.desc || 0, Math.max(0, sub - st.desc)); }
+    function total() { return sub - st.desc - recDesc(); }
+    function recalcular() {
+      sub = parte(); st.desc = Math.min(st.desc, sub); m.$('[data-sub]').textContent = gs(sub);
+      if (st.lines.length === 1) st.lines[0].monto = total(); paint();
+    }
+    if (D) {
+      m.el.addEventListener('change', function (e) {
+        if (e.target.name === 'sp_modo') {
+          sp.modo = e.target.value; m.$('[data-sp]').classList.toggle('hidden', sp.modo !== 'PERSONAS');
+          M.$$('[name="sp_modo"]', m.el).forEach(function (r) { r.closest('.opt').classList.toggle('on', r.checked); });
+          recalcular();
+        }
+        if (e.target.matches('[data-spp]')) { sp.sel[e.target.getAttribute('data-spp')] = e.target.checked; recalcular(); }
+        if (e.target.name === 'sp_comp') { sp.comp = e.target.value; recalcular(); }
+      });
+    }
+    function paint() {
+      m.$('[data-tot]').textContent = gs(total());
+      var rd = recDesc(); m.$('[data-recdesc-row]').style.display = rd ? '' : 'none'; m.$('[data-recdesc]').textContent = '−' + gs(rd);
+      var sinPago = total() === 0 && rd > 0;
+      M.$$('[data-lines],[data-addline]', m.el).forEach(function (x) { x.classList.toggle('hidden', sinPago); });
+      if (sinPago) st.lines = [{ medio: medios[0], monto: 0 }];
+      m.$('[data-lines]').innerHTML = st.lines.map(function (l, i) {
+        return '<div class="pago-line"><select class="input" data-lm="' + i + '">' + medios.map(function (md) { return '<option value="' + esc(md) + '"' + (md === l.medio ? ' selected' : '') + '>' + esc(M.medioTxt(md)) + '</option>'; }).join('') + '</select>' +
+          '<input class="input num" data-lv="' + i + '" inputmode="numeric" value="' + (l.monto ? M.gs(l.monto).replace('Gs. ', '') : '') + '">' +
+          (st.lines.length > 1 ? '<button class="btn ghost" data-rm="' + i + '" aria-label="Quitar">✕</button>' : '<span></span>') + '</div>';
+      }).join('');
+      var ef = st.lines.filter(function (l) { return l.medio === 'EFECTIVO'; }).reduce(function (s, l) { return s + l.monto; }, 0);
+      m.$('[data-ef]').classList.toggle('hidden', !ef);
+      var rec = M.parseGs(st.recibido);
+      m.$('[data-vuelto]').textContent = rec ? (rec >= ef ? gs(rec - ef) : 'Falta ' + gs(ef - rec)) : '—';
+    }
+    function rebalance() { if (st.lines.length === 1) st.lines[0].monto = total(); }
+    m.el.addEventListener('change', function (e) {
+      if (e.target.matches('[data-hasdesc]')) { m.$('[data-desc]').classList.toggle('hidden', !e.target.checked); if (!e.target.checked) { st.desc = 0; rebalance(); paint(); } }
+      if (e.target.matches('[data-lm]')) { st.lines[+e.target.getAttribute('data-lm')].medio = e.target.value; paint(); }
+    });
+    m.el.addEventListener('input', function (e) {
+      if (e.target.matches('[data-dm]')) { st.desc = Math.min(sub, M.parseGs(e.target.value)); rebalance(); m.$('[data-tot]').textContent = gs(total()); var li = m.$('[data-lv="0"]'); if (li && st.lines.length === 1) li.value = M.gs(st.lines[0].monto).replace('Gs. ', ''); }
+      if (e.target.matches('[data-lv]')) { st.lines[+e.target.getAttribute('data-lv')].monto = M.parseGs(e.target.value); }
+      if (e.target.matches('[data-rec]')) { st.recibido = e.target.value; var rec = M.parseGs(st.recibido), ef = st.lines.filter(function (l) { return l.medio === 'EFECTIVO'; }).reduce(function (s, l) { return s + l.monto; }, 0); m.$('[data-vuelto]').textContent = rec ? (rec >= ef ? gs(rec - ef) : 'Falta ' + gs(ef - rec)) : '—'; }
+    });
+    m.el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-addline]')) { var resto = total() - st.lines.reduce(function (s, l) { return s + l.monto; }, 0); st.lines.push({ medio: medios[Math.min(1, medios.length - 1)], monto: Math.max(0, resto) }); paint(); }
+      var rm = e.target.closest('[data-rm]'); if (rm) { st.lines.splice(+rm.getAttribute('data-rm'), 1); rebalance(); paint(); }
+      if (e.target.closest('[data-ok]')) {
+        var sinPago = total() === 0 && recDesc() > 0;
+        var suma = sinPago ? 0 : st.lines.reduce(function (s, l) { return s + l.monto; }, 0);
+        if (rec.faltan && rec.faltan.length) { m.$('[data-err]').textContent = 'Para canjear ' + rec.faltan.join(', ') + ' agregá el producto a la cuenta.'; return; }
+        if (suma !== total()) { m.$('[data-err]').textContent = 'Los pagos suman ' + gs(suma) + ' y el total es ' + gs(total()) + '.'; return; }
+        var cp = M.comprobanteLeer(m.el);
+        if (cp && cp.error) { m.$('[data-err]').textContent = cp.error; return; }
+        if (!sub) { m.$('[data-err]').textContent = 'Elegí al menos una persona con saldo pendiente.'; return; }
+        var pl = { request_id: reqId, cuenta_id: cuentaId, total_esperado_gs: sub, comprobante: cp, pagos: sinPago ? [] : st.lines.map(function (l) { return { medio: l.medio, monto_gs: l.monto }; }) };
+        if (panel) pl.recompensa = rec.activo ? { cliente_id: rec.cliente_id, sello: rec.sello, cupones: rec.cupones } : null;
+        if (D && sp.modo === 'PERSONAS') { pl.personas = Object.keys(sp.sel).filter(function (k) { return sp.sel[k]; }); pl.compartido = sp.comp; }
+        if (st.desc > 0) {
+          pl.descuento_gs = st.desc; pl.motivo_descuento = m.$('[data-dmot]').value.trim();
+          if (!esAdmin) pl.autorizacion = { usuario: m.$('[data-au]').value.trim(), pin: m.$('[data-ap]').value.trim() };
+        }
+        var b = m.$('[data-ok]'); b.disabled = true; b.textContent = 'Registrando…';
+        M.call('caja.cobrar', pl, { retries: 2 }).then(function (r) {
+          m.close(); M.toast((r.duplicado ? 'Cobro ya registrado: ' : 'Cobrado: ') + gs(r.cobro.total_gs), 'ok', 4000);
+          if (r.recompensa) {
+            var rr = r.recompensa;
+            M.toast(rr.nombre + ': ' + (rr.sello ? '+1 sello · ' : '') + rr.sellos + ' de ' + rr.meta + (rr.ciclo_completo ? ' · ¡tarjeta completa!' : '') +
+              (rr.cupones_nuevos && rr.cupones_nuevos.length ? ' · 🎁 ganó: ' + rr.cupones_nuevos.map(function (x) { return x.nombre; }).join(', ') : '') + (!rr.sello && rr.motivo ? ' · ' + rr.motivo : ''), rr.sello ? 'ok' : '', 7000);
+          }
+          S.ultimoCobro = r.cobro; S.sync.now();
+        }, function (e2) {
+          b.disabled = false; b.textContent = 'Confirmar cobro';
+          m.$('[data-err]').textContent = e2.message + (e2.red ? ' Podés reintentar: no se duplicará.' : '');
+          if (e2.code === 'TOTAL_CAMBIO') { m.close(); S.sync.now(); }
+        });
+      }
+    });
+    paint();
+  }
+
+  function movimiento(tipo) {
+    var esAdmin = M.session.usuario.rol === 'ADMIN', reqId = M.uid();
+    var m = M.modal({
+      title: tipo === 'INGRESO' ? 'Ingreso de efectivo' : 'Egreso de efectivo',
+      body: '<label class="f">Monto (Gs.)</label><input class="input num" data-m inputmode="numeric"><label class="f" style="margin-top:10px">Motivo</label><input class="input" data-mot maxlength="200" placeholder="Ej.: cambio, pago a proveedor">' +
+        (tipo === 'EGRESO' && !esAdmin ? '<div class="row" style="margin-top:10px"><input class="input" data-au placeholder="Usuario encargado"><input class="input" data-ap type="password" inputmode="numeric" placeholder="PIN encargado"></div>' : ''),
+      foot: '<button class="btn grow" data-x>Volver</button><button class="btn prim grow" data-ok>Registrar</button>'
+    });
+    m.$('[data-ok]').onclick = function () {
+      var pl = { request_id: reqId, caja_id: S.caja, tipo: tipo, monto_gs: M.parseGs(m.$('[data-m]').value), motivo: m.$('[data-mot]').value.trim() };
+      if (m.$('[data-au]')) pl.autorizacion = { usuario: m.$('[data-au]').value.trim(), pin: m.$('[data-ap]').value.trim() };
+      M.call('caja.movimiento', pl, { retries: 2 }).then(function () { m.close(); M.toast('Movimiento registrado.', 'ok'); S.sync.now(); }, err);
+    };
+  }
+
+  function cerrar() {
+    var decl = M.$('#decl').value, obs = M.$('#obs').value.trim();
+    if (!decl) { M.toast('Ingresá el efectivo contado (puede ser 0).', 'error'); return; }
+    var monto = M.parseGs(decl), dif = monto - S.estado.turno.totales.efectivo_esperado_gs;
+    M.confirmar('Cerrar turno', 'Efectivo contado ' + gs(monto) + ' · diferencia ' + gs(dif) + '. Después de cerrar no se pueden registrar más cobros hasta abrir un nuevo turno.', 'Cerrar caja', true).then(function (ok) {
+      if (!ok) return;
+      M.call('caja.cerrar', { caja_id: S.caja, efectivo_declarado_gs: monto, observacion: obs }).then(function (r) {
+        M.toast('Caja cerrada. Diferencia ' + gs(r.turno.diferencia_gs) + (r.cuentas_pendientes ? ' · quedaron ' + r.cuentas_pendientes + ' cuentas sin cobrar' : ''), r.turno.diferencia_gs ? 'error' : 'ok', 7000);
+        S.vista = 'cierres'; S.sync.now();
+      }, err);
+    });
+  }
+
+  function imprimir(cobroId) {
+    var c = S.estado.cobros.filter(function (x) { return x.cobro_id === cobroId; })[0]; if (!c) return;
+    var ps = S.data.pedidos.filter(function (p) { return p.cuenta_id === c.cuenta_id && p.estado !== 'CANCELADO'; });
+    var div = document.createElement('div'); div.className = 'print-only';
+    div.innerHTML = '<div style="max-width:300px;margin:0 auto;font-size:12px;font-family:monospace"><div style="text-align:center"><img src="assets/logo-local.png" style="width:120px"><br>' +
+      esc(CAJAS[S.caja].nombre) + '<br>' + M.fechaHora(c.fecha) + '<br><strong>COMPROBANTE INTERNO — NO VÁLIDO COMO FACTURA</strong></div><hr>' +
+      ps.map(function (p) { return p.items.filter(function (i) { return !i.anulado; }).map(function (i) { return i.cantidad + ' ' + esc(i.nombre) + '<span style="float:right">' + gs(i.total_gs) + '</span>' + (i.opciones ? '<br>&nbsp;&nbsp;' + esc(i.opciones) : ''); }).join('<br>'); }).join('<br>') +
+      '<hr>Subtotal<span style="float:right">' + gs(c.subtotal_gs) + '</span>' + (c.descuento_gs ? '<br>Descuento<span style="float:right">-' + gs(c.descuento_gs) + '</span>' : '') +
+      '<br><strong>TOTAL<span style="float:right">' + gs(c.total_gs) + '</span></strong><br>' + c.pagos.map(function (p) { return esc(M.medioTxt(p.medio)) + '<span style="float:right">' + gs(p.monto_gs) + '</span>'; }).join('<br>') +
+      (c.recompensa ? '<hr>' + esc(c.recompensa.nombre) + (c.recompensa.sello ? ': +1 sello' : '') + (c.recompensa.descuento_gs ? '<br>Premio canjeado<span style="float:right">-' + gs(c.recompensa.descuento_gs) + '</span>' : '') : '') +
+      (c.comprobante && c.comprobante.tipo === 'FACTURA' ? '<hr><strong>DATOS PARA FACTURA</strong><br>RUC/CI: ' + esc(c.comprobante.ruc) + '<br>' + esc(c.comprobante.razon) + (c.comprobante.email ? '<br>' + esc(c.comprobante.email) : '') : '<hr>Ticket sin factura') +
+      M.pieClub(!!c.recompensa) +
+      '<hr><div style="text-align:center">Ref. ' + esc(c.cobro_id.slice(-8)) + ' · ' + esc(c.usuario_id) + '<br>¡Gracias por visitarnos!</div></div>';
+    M.$('#main').appendChild(div); window.print(); setTimeout(function () { div.remove(); }, 500);
+  }
+
+  // Upgrade e-Kuatia'i: el botón aparece solo si Ser o Límites lo activó para este local (⚙ Licencia) y el navegador tiene la extensión.
+  function ekuatiaiContratado() { var pl = S.data && S.data.plan; return !!(pl && (pl.modulos || []).indexOf('EKUATIAI') >= 0); }
+  // Manda el detalle del cobro a la extensión, que rellena "Nueva factura" en e-Kuatia'i. La firma (PIN) la hace la persona.
+  function facturarEkuatiai(cobroId, forzar) {
+    var c = S.estado.cobros.filter(function (x) { return x.cobro_id === cobroId; })[0]; if (!c) return;
+    var f;
+    try { f = Facturador.armar({ cobro: c, pedidos: S.data.pedidos, local: document.title }); } catch (e) { return err(e); }
+    Facturador.enviar(f, forzar).then(function (r) {
+      if (r.ok) {
+        M.toast((r.pestana === 'ABIERTA' ? 'Abriendo' : 'Pasando a') + ' e-Kuatia\'i: se cargan ' + f.items.length + ' ítem' + (f.items.length === 1 ? '' : 's') + ' · ' + gs(f.total_gs) + '. Firmá con tu PIN allá.' + (f.modo === 'RESUMIDO' ? ' (Va en una sola línea: revisá el detalle.)' : ''), 'ok', 7000);
+        return;
+      }
+      if (r.codigo === 'YA_EMITIDA' || r.codigo === 'OTRA_EN_CURSO') {
+        var txt = r.codigo === 'YA_EMITIDA'
+          ? (r.seguro ? 'Este cobro ya se facturó en e-Kuatia\'i.' : 'Este cobro ya pasó por e-Kuatia\'i y el formulario se cerró (puede que ya esté facturado).') + ' Revisá en e-Kuatia\'i antes de emitir otra factura. ¿Cargarla de nuevo igual?'
+          : 'En e-Kuatia\'i hay otra factura cargada sin emitir (' + (r.receptor || 'otro cliente') + '). Si seguís, se reemplaza por esta.';
+        M.confirmar('e-Kuatia\'i', txt, r.codigo === 'YA_EMITIDA' ? 'Cargar de nuevo' : 'Reemplazar', true).then(function (ok) { if (ok) facturarEkuatiai(cobroId, true); });
+        return;
+      }
+      M.toast((r.errores && r.errores.length ? r.errores.join(' ') : 'La extensión rechazó la factura (' + r.codigo + ').'), 'error', 8000);
+    }, function (e) {
+      if (e.codigo === 'SIN_EXTENSION') { S.ekuatiai = null; render(); }
+      err(e);
+    });
+  }
+
+  function venta() {
+    if (!S.menu) { M.toast('Cargando carta…'); S.vista = 'cobrar'; return; }
+    var main = M.$('#main'); main.innerHTML = '<div id="comp"></div>';
+    var esTk = S.punto === 'B_TAKEAWAY';
+    Composer({
+      el: M.$('#comp'), menu: S.menu, titulo: '<button class="btn" id="cv">← Volver</button><h1 class="grow">' + (esTk ? 'Nueva venta para llevar' : 'Venta mostrador') + '</h1>',
+      pedirAlias: true, aliasObligatorio: false, aliasLabel: 'Nombre del cliente', permitirDirecta: true, botonTxt: 'Registrar pedido',
+      contexto: 'Se registra en ' + CAJAS[S.caja].nombre + '. Después cobralo desde “Por cobrar”.',
+      onCancel: function () { S.vista = 'cobrar'; render(); },
+      onSubmit: function (pl) {
+        pl.punto_id = S.punto;
+        return M.call('order.create', pl, { retries: 2 }).then(function (r) {
+          M.toast('Pedido ' + r.pedido.numero + ' registrado · ' + gs(r.pedido.total_gs), 'ok', 4000);
+          S.vista = 'cobrar'; S.sync.now();
+          S.pendienteCobro = r.pedido.cuenta_id; // se abre el cobro cuando llegue la sincronización
+        });
+      }
+    });
+    M.$('#cv').onclick = function () { S.vista = 'cobrar'; render(); };
+  }
+
+  function err(e) { M.toast(e.message || 'Error', 'error'); }
+})();
+</script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});</script>
+</body>
+</html>

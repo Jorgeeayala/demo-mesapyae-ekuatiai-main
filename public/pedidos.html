@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3EDE1">
+<title>Pedidos · Mesa Pya'e · Tu Local</title>
+<link rel="icon" href="assets/logo-local.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tu Local">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="assets/config.js"></script>
+<script src="assets/lib.js"></script>
+<script src="assets/realtime.js"></script>
+<script src="assets/composer.js"></script>
+<script src="assets/comandas.js"></script>
+<script src="assets/qr.js"></script>
+<script src="assets/rec.js"></script>
+<script>
+(function () {
+  var M = Mesa, esc = M.esc, gs = M.gs;
+  var S = { data: null, vista: 'mesas', mesa: null, menu: null, conocidos: null, sync: null, llevar: null };
+
+  M.staffPage({ modulo: 'Pedidos', roles: ['ADMIN', 'MOZO'], render: start });
+
+  function start() {
+    var app = document.getElementById('app');
+    app.innerHTML = M.topbar('Pedidos', '<button class="btn small" id="snd">🔔 Activar sonido</button>') + '<main id="main"><div class="empty">Cargando…</div></main>';
+    M.soundToggle(M.$('#snd'));
+    M.call('menu', { punto_id: 'A_CAFE' }, { retries: 2 }).then(function (m) { S.menu = m; });
+    S.sync = M.syncLoop(onData, { ms: 4000 });
+    setInterval(function () { if (S.data && (S.vista === 'mesas' || S.vista === 'mesa')) render(); }, 60000); // reservas que empiezan o vencen
+    setInterval(function () { M.tickElapsed(10, 20); }, 20000);
+    setInterval(function () { M.revisarAlertasLlevar(S.llevar); if (S.llevar && S.llevar.lista.length && S.vista !== 'componer' && S.vista !== 'mesa') render(); }, 15000);
+    M.$('#main').addEventListener('click', onClick);
+  }
+
+  function onData(d) {
+    // Avisos: pedidos nuevos LISTO o PENDIENTE
+    var claves = {};
+    d.pedidos.forEach(function (p) { if (p.punto_id === 'A_CAFE' && (p.estado === 'LISTO' || p.estado === 'PENDIENTE')) claves[p.pedido_id + p.estado] = 1; });
+    // Cuenta pedida (por el mozo o por el cliente desde su celular)
+    d.cuentas.forEach(function (c) { if (c.mesa_id && c.estado === 'CIERRE_SOLICITADO') claves[c.cuenta_id + 'C'] = 1; });
+    // Para llevar del QR (EQUIPO): al mozo de barra también le avisa cuando cocina lo tiene listo
+    var ajL = (d.ajustes || {}).para_llevar;
+    if (ajL && ajL.modo === 'EQUIPO' && ajL.atiendo) llevarDe(d).forEach(function (p) { if (p.estado === 'LISTO') claves[p.pedido_id + 'L'] = 1; });
+    if (S.conocidos) {
+      var nuevas = Object.keys(claves).filter(function (k) { return !S.conocidos[k]; });
+      if (nuevas.length) M.beep(2);
+      d.cuentas.forEach(function (c) { if (nuevas.indexOf(c.cuenta_id + 'C') >= 0 && c.cierre_pedido && c.cierre_pedido.origen === 'CLIENTE') M.toast('📱 ' + c.mesa + ' pidió la cuenta' + (c.comprobante && c.comprobante.tipo === 'FACTURA' ? ' (con factura)' : '') + '.', 'ok', 9000); });
+      llevarDe(d).forEach(function (p) { if (nuevas.indexOf(p.pedido_id + 'L') >= 0) M.toast('🥡 ' + p.numero + (p.alias ? ' · ' + p.alias : '') + ' está listo para entregar.', 'ok', 9000); });
+    }
+    S.llevar = M.avisosLlevar(d, S.llevar);
+    S.conocidos = claves;
+    S.data = d;
+    if (S.menu) {
+      var disp = {}; d.disponibilidad.forEach(function (x) { disp[x.id] = x.disponible; });
+      S.menu.productos.forEach(function (p) { if (disp[p.id] !== undefined) p.disponible = disp[p.id]; });
+    }
+    if (S.vista !== 'componer') render();
+  }
+
+  function pedidosA() { return S.data.pedidos.filter(function (p) { return p.punto_id === 'A_CAFE'; }); }
+  // Pedidos para llevar del QR que atiende el equipo (configuración EQUIPO)
+  function ajLlevar() { var a = (S.data && S.data.ajustes || {}).para_llevar; return a && a.modo === 'EQUIPO' ? a : null; }
+  function llevarDe(d) {
+    var a = (d.ajustes || {}).para_llevar;
+    if (!a || a.modo !== 'EQUIPO') return [];
+    return d.pedidos.filter(function (p) { return p.modo === 'TAKEAWAY' && p.origen === 'QR' && p.caja_id === a.caja; });
+  }
+  function renderLlevar() {
+    var a = ajLlevar(), ps = llevarDe(S.data);
+    var pend = ps.filter(function (p) { return p.estado === 'PENDIENTE'; }), listos = ps.filter(function (p) { return p.estado === 'LISTO'; });
+    var curso = ps.filter(function (p) { return p.estado === 'ACEPTADO' || p.estado === 'EN_PREPARACION'; });
+    var hechos = ps.filter(function (p) { return p.estado === 'ENTREGADO' || p.estado === 'CANCELADO'; }).slice(-10).reverse();
+    var sec = function (t, list, acc, vacio) {
+      return '<div class="section-h"><h2>' + t + '</h2><span class="badge' + (list.length ? '' : ' zero') + '">' + list.length + '</span></div>' +
+        (list.length ? '<div class="grid2">' + list.map(function (p) { return Comandas.ticket(p, { acciones: a.atiendo ? acc : [], warn: (a.alertas || [3])[0], danger: (a.alertas || [3, 5])[1] || 5 }); }).join('') + '</div>' : '<div class="empty">' + vacio + '</div>');
+    };
+    return (a.atiendo ? '' : '<p class="small muted" style="margin-top:0">Los acepta y entrega el mozo de barra (o la caja del salón). Acá ves en qué están.</p>') +
+      sec('Por aceptar', pend, ['aceptar', 'rechazar'], 'Sin pedidos para llevar por aceptar.') +
+      sec('Listos para entregar', listos, ['entregar'], 'Nada listo por ahora.') +
+      sec('En cocina', curso, [], 'Nada en cocina.') +
+      sec('Entregados / cancelados hoy', hechos, [], 'Sin movimientos todavía.');
+  }
+  function cuentaDeMesa(mesaId) {
+    return S.data.cuentas.filter(function (c) { return c.mesa_id === mesaId && (c.estado === 'ABIERTA' || c.estado === 'CIERRE_SOLICITADO'); })[0] || null;
+  }
+
+  function render() {
+    var main = M.$('#main'); if (!S.data) return;
+    var peds = pedidosA();
+    var pend = peds.filter(function (p) { return p.estado === 'PENDIENTE'; });
+    var listos = peds.filter(function (p) { return p.estado === 'LISTO'; });
+    var aL = ajLlevar(), llev = aL ? llevarDe(S.data) : [];
+    var nLlevar = llev.filter(function (p) { return p.estado === 'PENDIENTE' || (aL && aL.atiendo && p.estado === 'LISTO'); }).length;
+    if (S.vista === 'llevar' && !aL) S.vista = 'mesas';
+    var tabs = '<div class="tabs no-print" style="margin-bottom:14px">' +
+      tab('mesas', 'Mesas') + tab('pendientes', 'Por aceptar', pend.length) + tab('listos', 'Listos para servir', listos.length) + (aL ? tab('llevar', '🥡 Para llevar', nLlevar) : '') + '</div>';
+    if (S.vista === 'mesa') return renderMesa(main);
+    var html = (S.vista !== 'llevar' ? M.bannerLlevar(S.llevar) : '') + tabs;
+    if (S.vista === 'llevar') html += renderLlevar();
+    if (S.vista === 'mesas') html += renderMesas(peds);
+    if (S.vista === 'pendientes') html += pend.length ? '<div class="grid2">' + pend.map(function (p) { return Comandas.ticket(p, { acciones: ['aceptar', 'rechazar'] }); }).join('') + '</div>' : '<div class="empty">No hay pedidos QR esperando aceptación.</div>';
+    if (S.vista === 'listos') html += listos.length ? '<div class="grid2">' + listos.map(function (p) { return Comandas.ticket(p, { acciones: ['entregar'] }); }).join('') + '</div>' : '<div class="empty">No hay pedidos listos para servir.</div>';
+    main.innerHTML = html;
+  }
+  function tab(id, t, n) { return '<button class="tab' + (S.vista === id ? ' on' : '') + '" data-tab="' + id + '">' + esc(t) + (n ? '<span class="badge">' + n + '</span>' : '') + '</button>'; }
+
+  // Reserva vigente según la hora (se recalcula en pantalla aunque no haya cambios en el servidor)
+  function resv(m) {
+    var r = m.reserva; if (!r) return null;
+    var aj = S.data.ajustes || {}, t = Date.parse(r.hora), n = Date.now();
+    var tol = (aj.reserva_tolerancia_min || 30) * 60000, bl = (aj.reserva_bloqueo_min || 120) * 60000;
+    if (n > t + tol) return null;
+    return { nombre: r.nombre, hora: r.hora, personas: r.personas, nota: r.nota, bloquea: n >= t - bl, hhmm: M.hora(r.hora), dia: new Date(t).toDateString() === new Date().toDateString() ? '' : new Date(t).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit' }) + ' ' };
+  }
+  function renderMesas(peds) {
+    var mesas = S.data.mesas.filter(function (m) { return m.punto_id === 'A_CAFE'; });
+    return '<div class="mesas">' + mesas.map(function (m) {
+      var c = cuentaDeMesa(m.mesa_id);
+      var ps = c ? peds.filter(function (p) { return p.cuenta_id === c.cuenta_id; }) : peds.filter(function (p) { return p.mesa_id === m.mesa_id && p.estado === 'PENDIENTE'; });
+      var hayListo = ps.some(function (p) { return p.estado === 'LISTO'; });
+      var hayPend = ps.some(function (p) { return p.estado === 'PENDIENTE'; });
+      var r = resv(m), pagada = !c && m.pagada_en;
+      var cls = c ? (c.estado === 'CIERRE_SOLICITADO' ? 'cierre' : 'ocupada') : (pagada ? 'pagada' : (r && r.bloquea ? 'reservada' : ''));
+      if (hayListo) cls += ' listo'; if (hayPend) cls += ' pend';
+      var est = c ? (c.estado === 'CIERRE_SOLICITADO' ? (c.cierre_pedido ? '📱 Pidió la cuenta' : 'Pidió la cuenta') : 'Ocupada') : pagada ? 'Pagada · aún ocupada' : (r && r.bloquea ? 'Reservada · ' + esc(r.nombre) + ' ' + r.hhmm : 'Libre');
+      return '<button class="mesa ' + cls + '" data-mesa="' + esc(m.mesa_id) + '"><div class="n">' + m.numero + '</div>' +
+        '<div class="s">' + est + '</div>' + (r && (!r.bloquea || c) ? '<div class="s">Reserva ' + r.dia + r.hhmm + '</div>' : '') +
+        (c ? '<div class="t num">' + gs(c.total_gs) + '</div>' : '') +
+        '<div class="flags">' + (hayPend ? '<span class="chip vino">QR</span>' : '') + (hayListo ? '<span class="chip oliva">Listo</span>' : '') + '</div></button>';
+    }).join('') + '</div>' +
+      '<p class="small muted" style="margin-top:14px">Libre · <span style="color:var(--tierra)">Ocupada</span> · <span style="color:#7a5a14">Pidió la cuenta</span> · <span style="color:#2f5d8a">Pagada · aún ocupada</span> · <span style="color:#6b4a8a">Reservada</span> · <span style="color:var(--oliva)">Tiene platos listos</span> · <span style="color:var(--arcilla)">Pedido QR por aceptar</span></p>';
+  }
+
+  function renderMesa(main) {
+    var m = S.data.mesas.filter(function (x) { return x.mesa_id === S.mesa; })[0];
+    if (!m) { S.vista = 'mesas'; return render(); }
+    var c = cuentaDeMesa(m.mesa_id);
+    var peds = pedidosA().filter(function (p) { return c ? p.cuenta_id === c.cuenta_id : (p.mesa_id === m.mesa_id && p.estado === 'PENDIENTE'); });
+    var r = resv(m), pagada = !c && m.pagada_en, bloqueada = r && r.bloquea && !c;
+    var html = '<div class="row wrap no-print" style="margin-bottom:12px"><button class="btn" data-back>← Mesas</button><h1 class="grow">' + esc(m.nombre) + '</h1>' +
+      (c ? M.pagoChip(c.pago_estado) + (c.estado === 'CIERRE_SOLICITADO' ? '<span class="chip mostaza">Cuenta solicitada</span>' : '') : pagada ? '<span class="chip azul">Pagada · aún ocupada</span>' : bloqueada ? '<span class="chip">Reservada</span>' : '<span class="chip">Libre</span>') + '</div>' +
+      (r ? '<div class="banner ' + (bloqueada ? 'warn' : 'info') + '" style="border-radius:8px;margin-bottom:12px">Reserva: <strong>' + esc(r.nombre) + '</strong> · ' + r.dia + r.hhmm + (r.personas ? ' · ' + r.personas + ' personas' : '') + (r.nota ? ' · ' + esc(r.nota) : '') +
+        (bloqueada ? '. La mesa no se puede usar hasta que llegue (se libera sola 30 min después de la hora).' : '') + '</div>' : '') +
+      (c && c.estado === 'CIERRE_SOLICITADO' && c.cierre_pedido ? '<div class="banner warn" style="border-radius:8px;margin-bottom:12px">' + M.cierreTxt(c).replace('margin-top:4px', 'margin:0') + (c.comprobante ? '<div class="small" style="margin-top:4px">' + (c.comprobante.tipo === 'FACTURA' ? 'Factura a <strong>' + esc(c.comprobante.razon) + '</strong> · RUC/CI ' + esc(c.comprobante.ruc) : 'Ticket') + '</div>' : '') + '</div>' : '') +
+      '<div class="row wrap" style="margin-bottom:14px">' + (bloqueada ? '<button class="btn prim big" data-llego>Llegó la reserva</button>' : '<button class="btn prim big" data-nuevo>+ Agregar pedido</button>') +
+      (r ? '<button class="btn" data-cancres>Cancelar reserva</button>' : (!c ? '<button class="btn" data-reservar>Reservar</button>' : '')) +
+      (pagada ? '<button class="btn ok big" data-liberar>Liberar mesa</button>' : '') +
+      (c && c.estado === 'ABIERTA' && c.total_gs > 0 ? '<button class="btn warn big" data-cierre="' + esc(c.cuenta_id) + '">Solicitar cuenta</button>' : '') +
+      (c ? '<button class="btn" data-cambiar>🔀 Cambiar de mesa</button>' : '') +
+      (c && c.estado === 'CIERRE_SOLICITADO' ? '<button class="btn" data-anularcierre="' + esc(c.cuenta_id) + '">Cancelar pedido de cuenta</button>' : '') +
+      (!bloqueada ? '<button class="btn" data-addpersona>' + (c && c.personas ? '+ Persona' : 'Dividir por persona') + '</button>' : '') +
+      (c && S.data.recompensas ? '<button class="btn" data-rectj>' + (Rec.ICON[S.data.recompensas.icono] || '☕') + ' ' + (c.cliente ? esc(c.cliente.nombre) + ' · ' + c.cliente.sellos + '/' + c.cliente.meta : 'Tarjeta del cliente') + '</button>' : '') +
+      (c ? '<span class="right total-row" style="gap:12px">Total cuenta <span class="num">' + gs(c.total_gs) + '</span></span>' : '') + '</div>' +
+      (c && c.personas ? '<div class="personas-box">' + c.personas.personas.map(function (x) {
+        return '<span class="persona-t' + (x.pago && !x.pendiente_gs ? ' ok' : '') + '"><b>' + esc(x.nombre) + '</b><span class="num">' + gs(x.consumo_gs) + '</span>' + (x.pago && !x.pendiente_gs ? ' · pagó' : '') + '</span>';
+      }).join('') + (c.personas.compartido.consumo_gs ? '<span class="persona-t"><b>Compartido</b><span class="num">' + gs(c.personas.compartido.consumo_gs) + '</span></span>' : '') + '</div>' : '');
+    html += peds.length ? '<div class="grid2">' + peds.slice().reverse().map(function (p) {
+      var acc = [];
+      if (p.estado === 'PENDIENTE') acc = ['aceptar', 'rechazar'];
+      else if (p.estado === 'LISTO') acc = ['entregar', 'cancelar'];
+      else if (p.estado !== 'CANCELADO' && p.estado !== 'ENTREGADO') acc = ['cancelar'];
+      else if (p.estado === 'ENTREGADO') acc = ['cancelar'];
+      return Comandas.ticket(p, { acciones: acc, anularItems: p.estado !== 'CANCELADO' });
+    }).join('') + '</div>' : '<div class="empty">' + (pagada ? 'Cuenta cobrada. Cuando los clientes se vayan, tocá “Liberar mesa”. Si piden algo más, se abre una cuenta nueva.' : bloqueada ? 'Mesa reservada.' : 'Mesa libre. Tocá “Agregar pedido” para abrir la cuenta.') + '</div>';
+    main.innerHTML = html;
+  }
+
+  function abrirComposer() {
+    if (!S.menu) { M.toast('Cargando carta, esperá un momento…'); return; }
+    var m = S.data.mesas.filter(function (x) { return x.mesa_id === S.mesa; })[0];
+    var c = cuentaDeMesa(S.mesa);
+    S.vista = 'componer';
+    var main = M.$('#main');
+    main.innerHTML = '<div id="comp"></div>';
+    var pers = c && c.personas ? c.personas.personas.map(function (x) { return { id: x.id, nombre: x.nombre }; }) : [];
+    Composer({
+      el: M.$('#comp'), menu: S.menu, personas: pers, personaInicial: pers.length ? (S.ultimaPersona && pers.some(function (x) { return x.id === S.ultimaPersona; }) ? S.ultimaPersona : pers[0].id) : '', titulo: '<button class="btn" id="cv">← ' + esc(m.nombre) + '</button><h1 class="grow">Nuevo pedido · ' + esc(m.nombre) + '</h1>',
+      contexto: c ? 'Se suma a la cuenta abierta (' + gs(c.total_gs) + ').' : 'Abre una cuenta nueva para la mesa.',
+      botonTxt: 'Enviar a cocina', onCancel: volverMesa,
+      onSubmit: function (pl) {
+        pl.mesa_id = S.mesa; if (c) pl.cuenta_id = c.cuenta_id;
+        if (pl.items.length) S.ultimaPersona = pl.items[pl.items.length - 1].persona;
+        return M.call('order.create', pl, { retries: 2 }).then(function (r) {
+          M.toast((r.duplicado ? 'Pedido ya registrado: ' : 'Pedido enviado: ') + r.pedido.numero + ' · ' + gs(r.pedido.total_gs), 'ok', 4000);
+          volverMesa(); S.sync.refresh();
+        });
+      }
+    });
+    M.$('#cv').onclick = volverMesa;
+  }
+  // Módulo Recompensas: vincular la tarjeta del cliente a la cuenta (la caja suma el sello al cobrar)
+  function tarjetaCliente() {
+    var c = cuentaDeMesa(S.mesa); if (!c) return;
+    var R = S.data.recompensas;
+    var md = M.modal({
+      title: R.nombre,
+      body: (c.cliente ? '<p style="margin-top:0">Cuenta vinculada a <strong>' + esc(c.cliente.nombre) + '</strong> (' + c.cliente.sellos + ' de ' + c.cliente.meta + ' sellos). La caja suma el sello al cobrar.</p>' : '<p style="margin-top:0">Vinculá la tarjeta y la caja suma el sello al cobrar.</p>') +
+        '<div class="row" style="gap:6px"><input class="input grow" data-q placeholder="Celular o código de la tarjeta" inputmode="text">' + ('BarcodeDetector' in window ? '<button class="btn" data-scan aria-label="Escanear">📷</button>' : '') + '</div>' +
+        '<p class="small" data-err style="color:var(--vino);min-height:1em"></p>',
+      foot: (c.cliente ? '<button class="btn grow" data-unlink>Desvincular</button>' : '<button class="btn grow" data-new>+ Nuevo cliente</button>') + '<button class="btn prim grow" data-ok>Vincular</button>'
+    });
+    function vincular(q) {
+      M.call('rec.buscar', { q: q }).then(function (r) {
+        if (!r.encontrado) { md.$('[data-err]').textContent = 'No encontramos esa tarjeta.'; return; }
+        return M.call('rec.vincular', { cuenta_id: c.cuenta_id, cliente_id: r.cliente.cliente_id }).then(function () { md.close(); M.toast('Tarjeta de ' + r.cliente.nombre + ' vinculada.', 'ok'); S.sync.refresh(); });
+      }).catch(function (e2) { md.$('[data-err]').textContent = e2.message; });
+    }
+    md.$('[data-ok]').onclick = function () { vincular(md.$('[data-q]').value.trim()); };
+    md.$('[data-q]').addEventListener('keydown', function (e) { if (e.key === 'Enter') vincular(e.target.value.trim()); });
+    if (md.$('[data-scan]')) md.$('[data-scan]').onclick = function () { Rec.scan().then(function (t) { if (t) vincular(t); }); };
+    if (md.$('[data-unlink]')) md.$('[data-unlink]').onclick = function () { M.call('rec.vincular', { cuenta_id: c.cuenta_id, cliente_id: '' }).then(function () { md.close(); S.sync.refresh(); }, function (e2) { md.$('[data-err]').textContent = e2.message; }); };
+    if (md.$('[data-new]')) md.$('[data-new]').onclick = function () { md.close(); Rec.registrar({}, R.nombre).then(function (r) { if (r) M.call('rec.vincular', { cuenta_id: c.cuenta_id, cliente_id: r.cliente.cliente_id }).then(function () { S.sync.refresh(); }); }); };
+  }
+  function agregarPersona() {
+    var c = cuentaDeMesa(S.mesa);
+    var md = M.modal({
+      title: c && c.personas ? 'Agregar persona' : 'Dividir la mesa por persona',
+      body: (c && c.personas ? '' : '<p style="margin-top:0">Cada pedido se asigna a una persona y la caja puede cobrar a cada una por separado. Lo que sea para todos va como “Compartido”.</p>') +
+        '<label class="f" for="np-nombre">Nombre</label><input class="input" id="np-nombre" data-np maxlength="30" placeholder="Ej.: Ana, o Persona 1">' +
+        '<p class="small muted">Podés agregar varias seguidas: después de cada una el cuadro queda listo para la siguiente.</p><p class="small" data-err style="color:var(--vino);min-height:1em"></p>',
+      foot: '<button class="btn grow" data-x>Listo</button><button class="btn prim grow" data-ok>Agregar</button>'
+    });
+    var cuentaId = c ? c.cuenta_id : '';
+    function go() {
+      var n = md.$('[data-np]').value.trim(); if (!n) { md.$('[data-err]').textContent = 'Escribí un nombre.'; return; }
+      M.call('cuenta.personas', cuentaId ? { cuenta_id: cuentaId, agregar: n } : { mesa_id: S.mesa, agregar: n }).then(function (r) {
+        cuentaId = r.cuenta.cuenta_id; M.toast(n + ' agregado/a.', 'ok', 1500);
+        md.$('[data-np]').value = ''; md.$('[data-np]').focus(); md.$('[data-err]').textContent = ''; S.sync.refresh();
+      }, function (e2) { md.$('[data-err]').textContent = e2.message; });
+    }
+    md.$('[data-ok]').onclick = go;
+    md.$('[data-np]').addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+  }
+  function reservar() {
+    var m = S.data.mesas.filter(function (x) { return x.mesa_id === S.mesa; })[0];
+    var d = new Date(Date.now() + 3600000); d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0);
+    var local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    var md = M.modal({
+      title: 'Reservar ' + m.nombre,
+      body: '<label class="f">A nombre de</label><input class="input" data-rn maxlength="60">' +
+        '<label class="f" style="margin-top:8px">Día y hora</label><input class="input" data-rh type="datetime-local" value="' + local + '">' +
+        '<label class="f" style="margin-top:8px">Personas</label><input class="input num" data-rp inputmode="numeric" placeholder="Opcional">' +
+        '<label class="f" style="margin-top:8px">Nota</label><input class="input" data-rno maxlength="140" placeholder="Ej.: cumpleaños, silla de bebé (opcional)">' +
+        '<p class="small muted">La mesa queda bloqueada desde 2 horas antes. Si no llegan, se libera sola 30 minutos después de la hora.</p><p class="small" data-err style="color:var(--vino);min-height:1em"></p>',
+      foot: '<button class="btn grow" data-x>Volver</button><button class="btn prim grow" data-ok>Reservar</button>'
+    });
+    md.$('[data-ok]').onclick = function () {
+      var hv = md.$('[data-rh]').value; if (!hv) { md.$('[data-err]').textContent = 'Indicá día y hora.'; return; }
+      var per = md.$('[data-rp]').value.trim();
+      M.call('mesa.reservar', { mesa_id: S.mesa, nombre: md.$('[data-rn]').value.trim(), hora: new Date(hv).toISOString(), personas: per ? parseInt(per, 10) : 0, nota: md.$('[data-rno]').value.trim() })
+        .then(function () { md.close(); M.toast('Reserva registrada.', 'ok'); S.sync.refresh(); }, function (e2) { md.$('[data-err]').textContent = e2.message; });
+    };
+  }
+  // Cambiar de mesa: los clientes se mudan y se llevan la cuenta entera a una mesa libre.
+  function mesaLibre(m) {
+    var r = resv(m);
+    return !cuentaDeMesa(m.mesa_id) && !m.pagada_en && !(r && r.bloquea);
+  }
+  function cambiarMesa() {
+    var m = S.data.mesas.filter(function (x) { return x.mesa_id === S.mesa; })[0];
+    var c = cuentaDeMesa(S.mesa); if (!m || !c) return;
+    var libres = S.data.mesas.filter(function (x) { return x.punto_id === m.punto_id && x.mesa_id !== m.mesa_id && mesaLibre(x); });
+    var md = M.modal({
+      title: 'Mover ' + m.nombre + ' a otra mesa',
+      body: '<p style="margin-top:0">Elegí la mesa libre a la que se mudaron. Se lleva todo: pedidos (también los que están en cocina), personas y cuenta (' + gs(c.total_gs) + '). Cocina y caja reciben el aviso.</p>' +
+        (libres.length ? '<div class="mesas" data-destinos>' + libres.map(function (x) {
+          return '<button class="mesa" data-destino="' + esc(x.mesa_id) + '"><div class="n">' + x.numero + '</div><div class="s">Libre</div></button>';
+        }).join('') + '</div>' : '<div class="empty">No hay mesas libres en este momento.</div>') +
+        '<p class="small" data-err style="color:var(--vino);min-height:1em"></p>',
+      foot: '<button class="btn grow" data-x>Volver</button>'
+    });
+    md.el.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-destino]'); if (!b) return;
+      var dest = S.data.mesas.filter(function (x) { return x.mesa_id === b.getAttribute('data-destino'); })[0];
+      M.confirmar('Cambiar de mesa', 'Pasar la cuenta de ' + m.nombre + ' a ' + dest.nombre + '. ' + m.nombre + ' queda libre.', 'Cambiar a ' + dest.nombre).then(function (ok) {
+        if (!ok) return;
+        M.call('mesa.cambiar', { mesa_id: m.mesa_id, destino_id: dest.mesa_id }).then(function (r) {
+          md.close(); M.toast('Listo: ' + r.de + ' ahora es ' + r.a + '.', 'ok', 5000);
+          S.mesa = dest.mesa_id; S.vista = 'mesa'; S.sync.refresh();
+        }, function (e2) { md.$('[data-err]').textContent = e2.message; });
+      });
+    });
+  }
+  function volverMesa() { S.vista = 'mesa'; render(); window.scrollTo(0, 0); }
+
+  function onClick(e) {
+    var t;
+    if ((t = e.target.closest('[data-tab]'))) { S.vista = t.getAttribute('data-tab'); render(); return; }
+    if ((t = e.target.closest('[data-mesa]'))) { S.mesa = t.getAttribute('data-mesa'); S.vista = 'mesa'; render(); window.scrollTo(0, 0); return; }
+    if (e.target.closest('[data-back]')) { S.vista = 'mesas'; render(); return; }
+    if (e.target.closest('[data-nuevo]')) { abrirComposer(); return; }
+    if (e.target.closest('[data-reservar]')) { reservar(); return; }
+    if (e.target.closest('[data-cambiar]')) { cambiarMesa(); return; }
+    if (e.target.closest('[data-addpersona]')) { agregarPersona(); return; }
+    if (e.target.closest('[data-rectj]')) { tarjetaCliente(); return; }
+    if (e.target.closest('[data-llego]') || e.target.closest('[data-cancres]')) {
+      var llego = !!e.target.closest('[data-llego]');
+      (llego ? Promise.resolve(true) : M.confirmar('Cancelar reserva', 'La mesa vuelve a quedar libre.', 'Cancelar reserva', true)).then(function (ok) {
+        if (ok) M.call('mesa.reservaFin', { mesa_id: S.mesa, motivo: llego ? 'LLEGO' : 'CANCELADA' }).then(function () { M.toast(llego ? 'Mesa habilitada. ¡Bienvenidos!' : 'Reserva cancelada.', 'ok'); S.sync.refresh(); }, err);
+      });
+      return;
+    }
+    if (e.target.closest('[data-liberar]')) {
+      M.call('mesa.liberar', { mesa_id: S.mesa }).then(function () { M.toast('Mesa liberada.', 'ok'); S.vista = 'mesas'; S.sync.refresh(); }, err);
+      return;
+    }
+    if ((t = e.target.closest('[data-anularcierre]'))) {
+      var cid = t.getAttribute('data-anularcierre');
+      M.confirmar('Cancelar pedido de cuenta', 'La mesa vuelve a "Ocupada" y caja no la cobra hasta que la vuelvas a pedir.', 'Cancelar pedido').then(function (ok) {
+        if (ok) M.call('cuenta.cancelClose', { cuenta_id: cid }).then(function () { M.toast('Pedido de cuenta cancelado.', 'ok'); S.sync.refresh(); }, err);
+      });
+      return;
+    }
+    if ((t = e.target.closest('[data-cierre]'))) {
+      var id = t.getAttribute('data-cierre');
+      M.pedirComprobante('Solicitar cuenta', 'Se avisa a Caja 01 que la mesa quiere pagar.', null, 'Solicitar cuenta').then(function (cp) {
+        if (cp) M.call('cuenta.requestClose', { cuenta_id: id, comprobante: cp }).then(function () { M.toast('Cuenta solicitada a caja' + (cp.tipo === 'FACTURA' ? ' (con factura).' : '.'), 'ok'); S.sync.refresh(); }, err);
+      });
+      return;
+    }
+    Comandas.handleClick(e, function () { S.sync.refresh(); });
+  }
+  function err(e) { M.toast(e.message || 'Error', 'error'); }
+})();
+</script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});</script>
+</body>
+</html>

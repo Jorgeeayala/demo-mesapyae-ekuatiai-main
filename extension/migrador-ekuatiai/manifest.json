@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Mesa Pya'e · Migrador e-Kuatia'i",
+  "short_name": "Migrador e-Kuatia'i",
+  "version": "1.0.5",
+  "description": "Pasa los datos de factura de un cobro de Mesa Pya'e al formulario de e-Kuatia'i (DNIT). La firma con PIN y la emisión siempre las hace una persona.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsN14lFpT6i9ukoCxxhEvhfWUWfAQvP4L1C9aZAwo14FS5SEWo3Ok5XBVAXabVYNgEBrold8U4gowE9OM3wo00c341F9laup6KWcSsWqdDx5i4y/WX84X0zbw+JRe6yB0JdDnk9L78DEOWR4M6xKMoFribo8Y+LLmaVwiLoAuLDhcp0KKEknGeC1x/oSyr0CDsaS6a+I9kdy2cX0jteyA75jX/WOXPO7zTcALElbUeHs22xzcMPvo/xITh7zcIw+UGisK9Ok3/Hz7bVpBcwDp6T10s1UFOhD9aOVEtkJ/38uwdY9YeOW6Ap5HT2KGX41PtIY/JPDFfuWWUrrVqbMJiwIDAQAB",
+  "minimum_chrome_version": "110",
+  "permissions": ["tabs", "storage"],
+  "host_permissions": [
+    "https://ekuatia.set.gov.py/*",
+    "https://desa-ekuatia.set.gov.py/*"
+  ],
+  "background": { "service_worker": "service-worker.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://ekuatia.set.gov.py/*", "https://desa-ekuatia.set.gov.py/*"],
+      "js": ["campos.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "externally_connectable": {
+    "matches": [
+      "https://mesapyae-pruebas.netlify.app/*",
+      "https://mesapyae-demo.web.app/*",
+      "http://127.0.0.1/*",
+      "http://localhost/*"
+    ]
+  },
+  "action": {
+    "default_title": "Migrador e-Kuatia'i",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  },
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+}

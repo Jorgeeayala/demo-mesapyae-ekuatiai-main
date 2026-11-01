@@ -1,0 +1,17 @@
+rules_version = '2';
+// Mesa Pya'e
+// Los navegadores NO leen ni escriben datos: todo pasa por la función `api` (que usa
+// credenciales de servidor y no está sujeta a estas reglas). La única excepción es el
+// "pulso" (meta/pulse): un número de revisión sin datos del negocio, que las pantallas
+// escuchan en tiempo real para saber cuándo pedir novedades.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /meta/pulse {
+      allow get: if true;
+      allow list, write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

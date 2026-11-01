@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3EDE1">
+<title>Mesa Pya'e · Tu Local</title>
+<link rel="icon" href="assets/logo-local.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tu Local">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="assets/config.js"></script>
+<script src="assets/lib.js"></script>
+<script src="assets/realtime.js"></script>
+<script>
+(function () {
+  var M = Mesa, esc = M.esc;
+  var MODULOS = [
+    { href: 'pedidos.html', t: 'Pedidos', d: 'Mesas, comandas y cuentas del salón.', roles: ['ADMIN', 'MOZO'] },
+    { href: 'cocina.html', t: 'Cocina', d: 'Cola de preparación y pedidos listos.', roles: ['ADMIN', 'COCINA'] },
+    { href: 'caja.html?caja=CAJA_A', t: 'Caja 01', d: 'Salón principal: cobros, turnos y cierre.', roles: ['ADMIN', 'CAJA'], caja: 'CAJA_A' },
+    { href: 'caja.html?caja=CAJA_B', t: 'Caja 02', d: 'Para llevar: ventas, retiros y cierre.', roles: ['ADMIN', 'CAJA'], caja: 'CAJA_B' },
+    { href: 'admin.html', t: 'Administración', d: 'Reportes, catálogo, mesas y QR, usuarios.', roles: ['ADMIN'] }
+  ];
+  M.staffPage({
+    modulo: 'Inicio',
+    render: function (s) {
+      var u = s.usuario;
+      var mods = MODULOS.filter(function (m) { return m.roles.indexOf(u.rol) >= 0 && (!m.caja || u.rol === 'ADMIN' || u.caja_id === m.caja) && !(m.caja === 'CAJA_B' && (window.MESA_LOCAL && window.MESA_LOCAL.sinTakeaway)); });
+      // Un solo módulo: entrar directo
+      if (mods.length === 1 && !/nostay/.test(location.search)) { location.replace(mods[0].href); return; }
+      document.getElementById('app').innerHTML = M.topbar('Mesa Pya\'e') +
+        '<main><h1 style="margin:6px 0 4px">Hola, ' + esc(u.nombre.split(' ')[0]) + '</h1><p class="muted" style="margin-top:0">Elegí el módulo de trabajo.</p>' +
+        '<div class="portal">' + mods.map(function (m) {
+          return '<a class="card tile" href="' + m.href + '"><h2>' + esc(m.t) + '</h2><div class="muted">' + esc(m.d) + '</div></a>';
+        }).join('') + '</div></main>';
+    }
+  });
+})();
+</script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});</script>
+</body>
+</html>

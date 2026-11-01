@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3EDE1">
+<title>Administración · Mesa Pya'e · Tu Local</title>
+<link rel="icon" href="assets/logo-local.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tu Local">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .bar { height: 8px; background: var(--tierra); border-radius: 4px; }
+  .qr-sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+  .qr-card { text-align: center; padding: 16px; border: 1px solid var(--linea); border-radius: 12px; background: #fff; break-inside: avoid; }
+  .qr-card svg { width: 180px; height: 180px; }
+  .qr-card .mn { font-family: var(--f-tit); font-size: 1.5rem; text-transform: uppercase; }
+  .qr-card img { width: 110px; }
+  .print-only { display: none; }
+  @media print {
+    .print-only { display: block; } #main > :not(.print-only) { display: none !important; }
+    .qr-sheet { grid-template-columns: repeat(2, 1fr); } .qr-card { page-break-inside: avoid; border: 1px dashed #999; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="assets/config.js"></script>
+<script src="assets/lib.js"></script>
+<script src="assets/realtime.js"></script>
+<script src="assets/qr.js"></script>
+<script src="assets/stock.js"></script>
+<script src="assets/atencion.js"></script>
+<script src="assets/carta-ia-ui.js"></script>
+<script>
+(function () {
+  var M = Mesa, esc = M.esc, gs = M.gs;
+  var S = { vista: 'resumen', admin: null, rep: null, desde: null, hasta: null, catFiltro: '', q: '', base: '' };
+  var baseDefault = location.origin + location.pathname.replace(/[^/]*$/, '');
+  try { S.base = localStorage.getItem('mesapyae.baseUrl') || baseDefault; } catch (e) { S.base = baseDefault; }
+  var ROL_TXT = { ADMIN: 'Encargado / Admin', MOZO: 'Mozo', COCINA: 'Cocina', CAJA: 'Caja' };
+
+  M.staffPage({ modulo: 'Administración', roles: ['ADMIN'], render: start });
+
+  function hoy() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Asuncion' }).format(new Date()); }
+  function start() {
+    S.desde = S.hasta = hoy();
+    document.getElementById('app').innerHTML = M.topbar('Administración') + '<main id="main"></main>';
+    M.$('#main').addEventListener('click', onClick);
+    M.$('#main').addEventListener('change', onChange);
+    M.$('#main').addEventListener('input', onInput);
+    load();
+  }
+  function load() {
+    return Promise.all([M.call('admin.data', {}), M.call('admin.report', { desde: S.desde, hasta: S.hasta }), cargarRec(), cargarRes()]).then(function (r) { S.admin = r[0]; S.rep = r[1]; render(); }, err);
+  }
+  function reload() { return M.call('admin.data', {}).then(function (d) { S.admin = d; render(); }, err); }
+
+  function render() {
+    var tabs = [['resumen', 'Resumen'], ['catalogo', 'Catálogo'], ['grupos', 'Opciones'], ['mesas', 'Mesas y QR'], ['usuarios', 'Usuarios'], ['config', 'Configuración'], ['auditoria', 'Auditoría']];
+    if (S.res && S.res.licencia) tabs.splice(1, 0, ['resenas', '★ Reseñas']);
+    if (M.session.usuario.plataforma) tabs.push(['licencia', '⚙ Licencia (SoL)']);
+    if (S.rec && S.rec.licencia) tabs.splice(1, 0, ['recompensas', '★ Recompensas']);
+    if (tieneStock()) tabs.splice(2, 0, ['stock', '💰 Mesa Viru']);
+    if (tieneModulo('ATENCION')) tabs.splice(2, 0, ['whatsapp', '💬 WhatsApp']);
+    var h = '<div class="tabs no-print" style="margin-bottom:14px">' + tabs.map(function (t) { return '<button class="tab' + (S.vista === t[0] ? ' on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
+    var f = { stock: function () { return '<div id="stock-root"></div>'; }, whatsapp: function () { return '<div id="wa-root"></div>'; }, licencia: licencia, resenas: resenas, recompensas: function () { return S.rec && S.rec.licencia ? recompensas() : recSinLicencia(); }, resumen: resumen, catalogo: catalogo, grupos: grupos, mesas: mesas, usuarios: usuarios, config: config, auditoria: auditoria }[S.vista];
+    M.$('#main').innerHTML = h + '<div id="view">' + (f ? f() : '') + '</div>';
+    if (S.vista === 'stock' && window.StockAdmin) StockAdmin.mount(M.$('#stock-root'), { menu: S.admin.menu });
+    if (S.vista === 'whatsapp' && window.AtencionAdmin) AtencionAdmin.mount(M.$('#wa-root'));
+    if (S.vista === 'auditoria' && !S.audit) M.call('admin.audit', {}).then(function (a) { S.audit = a.auditoria; render(); }, err);
+  }
+
+  function tieneStock() { return tieneModulo('STOCK'); }
+  function tieneModulo(m) { return !!(S.admin && S.admin.plan && (S.admin.plan.modulos || []).indexOf(m) >= 0); }
+  // Resumen: costo de ventas, ganancia y margen por plato (Upgrade Mesa Viru) y tiempos por estación.
+  function resumenStock(r) {
+    var st = r.stock, te = r.tiempos_por_estacion || [], h = '';
+    if (te.length > 1) h += '<div class="card pad" style="margin-top:14px"><h2>Tiempo por estación</h2><p class="small muted">Desde que se aceptó el pedido hasta que cada estación marcó su parte lista.</p><table class="tbl"><tbody>' +
+      te.map(function (x) { return '<tr><td>' + esc(x.nombre) + '</td><td class="r num">mediana <strong>' + x.mediana + ' min</strong></td><td class="r num small muted">promedio ' + x.promedio + ' min · ' + x.muestras + ' pedidos</td></tr>'; }).join('') + '</tbody></table></div>';
+    if (!st) return h;
+    var cant = window.StockAdmin ? StockAdmin.cant : function (n) { return n; };
+    return '<div class="kpis" style="margin-top:14px" data-stock-kpis>' + kpi('Ventas con receta', gs(st.ventas_con_costo_gs)) + kpi('Costo de insumos', gs(st.costo_ventas_gs)) +
+      kpi('Ganancia bruta', gs(st.ganancia_bruta_gs), st.margen_pct === null ? '' : 'margen ' + st.margen_pct + ' %') +
+      kpi('Mermas y conteos', gs(st.mermas_gs - st.diferencia_conteo_gs + st.consumo_sin_venta_gs), 'mermas ' + gs(st.mermas_gs) + ' · conteos ' + gs(st.diferencia_conteo_gs)) + '</div>' +
+      (st.lineas_sin_receta ? '<p class="small muted">' + st.lineas_sin_receta + ' unidades vendidas sin receta cargada (no suman costo). Cargá sus recetas en 💰 Mesa Viru → Recetas y margen.</p>' : '') +
+      '<div class="grid2" style="margin-top:14px"><div class="card pad"><h2>Qué te deja más plata</h2><table class="tbl" style="margin-top:8px"><thead><tr><th>Plato</th><th class="r">Vendidos</th><th class="r">Ganancia</th><th class="r">Margen</th></tr></thead><tbody>' +
+      (st.productos.length ? st.productos.slice(0, 15).map(function (t) { return '<tr><td>' + esc(t.nombre) + '</td><td class="r num">' + t.cantidad + '</td><td class="r num">' + (t.margen_pct === null ? '—' : gs(t.importe_gs - t.costo_gs)) + '</td><td class="r num">' + (t.margen_pct === null ? '<span class="small muted">sin receta</span>' : t.margen_pct + ' %') + '</td></tr>'; }).join('') : '<tr><td class="muted">Sin ventas en el período.</td></tr>') +
+      '</tbody></table></div><div class="card pad"><h2>Consumo de insumos</h2><table class="tbl" style="margin-top:8px"><tbody>' +
+      (st.consumo.length ? st.consumo.slice(0, 15).map(function (c) { return '<tr><td>' + esc(c.nombre) + '</td><td class="r num">' + cant(c.cantidad, c.unidad) + '</td><td class="r num">' + gs(c.costo_gs) + '</td></tr>'; }).join('') : '<tr><td class="muted">Sin consumo en el período.</td></tr>') +
+      '</tbody></table><p class="small muted">Compras del período: ' + gs(st.compras_gs) + '</p></div></div>' + h;
+  }
+
+  // ------------------------------------------------------------ resumen
+  function kpi(l, v, sub) { return '<div class="card kpi"><div class="l">' + esc(l) + '</div><div class="v num">' + esc(v) + '</div>' + (sub ? '<div class="small muted">' + esc(sub) + '</div>' : '') + '</div>'; }
+  function resumen() {
+    var r = S.rep; if (!r) return '<div class="empty">Cargando…</div>';
+    var ca = r.cajas.filter(function (c) { return c.caja_id === 'CAJA_A'; })[0] || {}, cb = r.cajas.filter(function (c) { return c.caja_id === 'CAJA_B'; })[0] || {};
+    var maxTop = r.top_productos.length ? r.top_productos[0].cantidad : 1;
+    var obj = function (o) { var k = Object.keys(o); return k.length ? k.map(function (x) { return esc(M.ESTADO_TXT[x] || x) + ': <strong>' + o[x] + '</strong>'; }).join(' · ') : '—'; };
+    return '<div class="row wrap no-print" style="margin-bottom:12px"><label class="small">Desde <input type="date" class="input" id="desde" value="' + S.desde + '" style="width:auto"></label>' +
+      '<label class="small">Hasta <input type="date" class="input" id="hasta" value="' + S.hasta + '" style="width:auto"></label><button class="btn prim" data-rep>Actualizar</button>' +
+      '<button class="btn" data-csv>Exportar CSV</button><button class="btn" onclick="window.print()">Imprimir</button></div>' +
+      '<p class="small muted">Ventas = cobros registrados menos reversos, según la fecha del movimiento. Período: ' + esc(r.desde) + ' a ' + esc(r.hasta) + '.</p>' +
+      '<div class="kpis">' + kpi('Consolidado', gs(r.consolidado_gs)) + kpi('Caja 01 · Salón', gs(ca.ventas_netas_gs), (ca.cantidad_cobros || 0) + ' cobros') +
+      kpi('Caja 02 · Para llevar', gs(cb.ventas_netas_gs), (cb.cantidad_cobros || 0) + ' cobros') + kpi('Pedidos', r.pedidos.total) + kpi('Cancelados', r.cancelados.length) +
+      kpi('Preparación (mediana)', r.tiempos_preparacion_min.mediana !== undefined ? r.tiempos_preparacion_min.mediana + ' min' : '—', r.tiempos_preparacion_min.muestras + ' muestras') + '</div>' +
+      '<div class="grid2" style="margin-top:14px"><div class="card pad"><h2>Ventas por caja y medio</h2><table class="tbl" style="margin-top:8px"><thead><tr><th>Caja</th><th>Medio</th><th class="r">Neto</th></tr></thead><tbody>' +
+      r.cajas.map(function (c) {
+        var ms = Object.keys(c.por_medio);
+        return (ms.length ? ms : ['—']).map(function (m, i) { return '<tr><td>' + (i ? '' : esc(c.nombre)) + '</td><td>' + esc(m === '—' ? 'Sin cobros' : M.medioTxt(m)) + '</td><td class="r num">' + (m === '—' ? '' : gs(c.por_medio[m])) + '</td></tr>'; }).join('') +
+          '<tr><td></td><td><strong>Total</strong>' + (c.reversos_gs ? ' <span class="small muted">(reversos ' + gs(c.reversos_gs) + ')</span>' : '') + (c.descuentos_gs ? ' <span class="small muted">(descuentos ' + gs(c.descuentos_gs) + ')</span>' : '') + '</td><td class="r num"><strong>' + gs(c.ventas_netas_gs) + '</strong></td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="card pad"><h2>Pedidos</h2><p class="small">Por punto: ' + obj({ 'Salón': r.pedidos.por_punto.A_CAFE || 0, 'Para llevar': r.pedidos.por_punto.B_TAKEAWAY || 0 }) + '</p><p class="small">Por estado: ' + obj(r.pedidos.por_estado) + '</p><p class="small">Por origen: ' + obj(r.pedidos.por_origen) + '</p>' +
+      '<p class="small muted">' + esc(r.tiempos_preparacion_min.nota || ('Tiempo aceptado→listo: promedio ' + r.tiempos_preparacion_min.promedio + ' min, mediana ' + r.tiempos_preparacion_min.mediana + ' min.')) + '</p></div></div>' +
+      '<div class="grid2" style="margin-top:14px"><div class="card pad"><h2>Productos más vendidos</h2><table class="tbl" style="margin-top:8px"><tbody>' +
+      (r.top_productos.length ? r.top_productos.map(function (t) { return '<tr><td>' + esc(t.nombre) + '<div class="bar" style="width:' + Math.round(t.cantidad / maxTop * 100) + '%"></div></td><td class="r num">' + t.cantidad + '</td><td class="r num">' + gs(t.importe_gs) + '</td></tr>'; }).join('') : '<tr><td class="muted">Sin ventas en el período.</td></tr>') +
+      '</tbody></table></div><div class="card pad"><h2>Cancelaciones y reversos</h2><table class="tbl" style="margin-top:8px"><tbody>' +
+      (r.cancelados.length ? r.cancelados.map(function (c) { return '<tr><td>' + esc(c.numero) + '<div class="small muted">' + esc(c.fecha) + '</div></td><td>' + esc(c.motivo) + '</td><td class="r num">' + gs(c.total_gs) + '</td></tr>'; }).join('') : '<tr><td class="muted">Sin cancelaciones.</td></tr>') +
+      r.cobros_revertidos.map(function (c) { return '<tr><td>Cobro revertido<div class="small muted">' + esc(c.caja_id) + '</div></td><td>' + esc(c.motivo_reverso) + ' · autorizó ' + esc(c.revertido_por) + '</td><td class="r num">' + gs(c.total_gs) + '</td></tr>'; }).join('') +
+      '</tbody></table></div></div>' + resumenStock(r) +
+      '<div class="card pad" style="margin-top:14px"><h2>Turnos y cierres de caja</h2><div class="tbl-wrap"><table class="tbl" style="margin-top:8px"><thead><tr><th>Caja</th><th>Apertura</th><th>Cierre</th><th class="r">Ventas</th><th class="r">Esperado</th><th class="r">Contado</th><th class="r">Diferencia</th><th>Obs.</th></tr></thead><tbody>' +
+      (r.cierres.length ? r.cierres.map(function (t) {
+        return '<tr><td>' + esc(t.caja_id) + '</td><td>' + M.fechaHora(t.abierto_en) + '<div class="small muted">' + esc(t.abierto_por) + '</div></td><td>' + (t.estado === 'CERRADO' ? M.fechaHora(t.cerrado_en) + '<div class="small muted">' + esc(t.cerrado_por) + '</div>' : '<span class="chip oliva">Abierto</span>') + '</td>' +
+          '<td class="r num">' + gs(t.totales.ventas_netas_gs) + '</td><td class="r num">' + (t.estado === 'CERRADO' ? gs(t.esperado_efectivo_gs) : gs(t.totales.efectivo_esperado_gs)) + '</td><td class="r num">' + (t.estado === 'CERRADO' ? gs(t.declarado_efectivo_gs) : '—') + '</td>' +
+          '<td class="r num" style="color:' + (t.diferencia_gs ? 'var(--vino)' : 'inherit') + '">' + (t.estado === 'CERRADO' ? '<strong>' + gs(t.diferencia_gs) + '</strong>' : '—') + '</td><td class="small">' + esc(t.observacion || '') + '</td></tr>';
+      }).join('') : '<tr><td colspan="8" class="muted">Sin turnos en el período.</td></tr>') + '</tbody></table></div></div>';
+  }
+  function csv() {
+    var r = S.rep, rows = [['seccion', 'clave', 'detalle', 'valor_gs_o_cantidad']];
+    r.cajas.forEach(function (c) { Object.keys(c.por_medio).forEach(function (m) { rows.push(['ventas', c.caja_id, m, c.por_medio[m]]); }); rows.push(['ventas', c.caja_id, 'TOTAL', c.ventas_netas_gs]); });
+    rows.push(['ventas', 'CONSOLIDADO', '', r.consolidado_gs]);
+    r.top_productos.forEach(function (t) { rows.push(['top_productos', t.producto_id, t.nombre, t.cantidad]); });
+    r.cancelados.forEach(function (c) { rows.push(['cancelados', c.numero, c.motivo, c.total_gs]); });
+    r.cierres.forEach(function (t) { rows.push(['cierres', t.caja_id, t.cerrado_en || 'abierto', t.diferencia_gs === undefined ? '' : t.diferencia_gs]); });
+    if (r.stock) {
+      rows.push(['costos', 'VENTAS_CON_RECETA', '', r.stock.ventas_con_costo_gs], ['costos', 'COSTO_INSUMOS', '', r.stock.costo_ventas_gs], ['costos', 'GANANCIA_BRUTA', '', r.stock.ganancia_bruta_gs]);
+      r.stock.productos.forEach(function (t) { rows.push(['margen_plato', t.producto_id, t.nombre, t.margen_pct === null ? '' : t.importe_gs - t.costo_gs]); });
+      r.stock.consumo.forEach(function (c) { rows.push(['consumo_insumo', c.insumo_id, c.nombre + ' (' + c.cantidad + ' ' + c.unidad + ')', c.costo_gs]); });
+    }
+    var txt = '﻿' + rows.map(function (x) { return x.map(function (v) { v = String(v === undefined ? '' : v); return /[",;\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'reporte-' + r.desde + '_' + r.hasta + '.csv'; a.click();
+  }
+
+  // ------------------------------------------------------------ Upgrade "Armá tu pedido"
+  function conArmador() { return S.admin.plan.modulos.indexOf('ARMADOR') >= 0; }
+  var DIBUJOS = [['', 'Automático (por el nombre)'], ['QUESO', 'Queso / muzzarella'], ['CHEDDAR', 'Cheddar'], ['QUESO_CREMA', 'Queso crema / catupiry'], ['PEPPERONI', 'Pepperoni / salame'],
+    ['JAMON', 'Jamón'], ['CHAMPINON', 'Champiñón'], ['ACEITUNA', 'Aceituna'], ['CEBOLLA', 'Cebolla'], ['CEBOLLA_CARAMELIZADA', 'Cebolla caramelizada'], ['MORRON', 'Locote / morrón'],
+    ['TOMATE', 'Tomate'], ['ALBAHACA', 'Albahaca / hojas'], ['CHOCLO', 'Choclo'], ['ANANA', 'Ananá'], ['PALMITO', 'Palmito'], ['PANCETA', 'Panceta / bacon'], ['POLLO', 'Pollo'],
+    ['CARNE', 'Carne / medallón'], ['HUEVO', 'Huevo'], ['LECHUGA', 'Lechuga'], ['PEPINO', 'Pepinillo'], ['JALAPENO', 'Jalapeño'], ['SALSA', 'Salsa (color por el nombre)'],
+    ['PAN_BRIOCHE', 'Pan brioche / clásico'], ['PAN_NEGRO', 'Pan negro / integral'], ['PAN_PAPA', 'Pan de papa'], ['GENERICO', 'Otro (color propio)']];
+  // ------------------------------------------------------------ estaciones (cocina, barra 1, barra 2…)
+  function variasEst() { return (S.admin.estaciones || []).length > 1; }
+  function estNombre(id) { var e = (S.admin.estaciones || []).filter(function (x) { return x.id === id; })[0]; return e ? e.nombre : id; }
+  function estSelect(attr, valor, vacio) {
+    return '<select class="input" ' + attr + '>' + (vacio ? '<option value="">' + esc(vacio) + '</option>' : '') +
+      (S.admin.estaciones || []).map(function (e) { return '<option value="' + esc(e.id) + '"' + (e.id === valor ? ' selected' : '') + '>' + esc(e.nombre) + '</option>'; }).join('') + '</select>';
+  }
+
+  // ------------------------------------------------------------ catálogo
+  function catalogo() {
+    var m = S.admin.menu, cats = {}; m.categorias.forEach(function (c) { cats[c.id] = c; });
+    var q = S.q.toLowerCase();
+    var list = m.productos.filter(function (p) { return (!S.catFiltro || p.categoria === S.catFiltro) && (!q || p.nombre.toLowerCase().indexOf(q) >= 0); });
+    var porValidar = m.productos.filter(function (p) { return p.validacion !== 'APROBADO'; }).length;
+    return (porValidar ? '<div class="banner warn" style="border-radius:8px;margin-bottom:12px">' + porValidar + ' productos con precio <strong>POR VALIDAR</strong>. Revisalos con el dueño o el encargado del local y marcá “Aprobado” en cada uno antes de imprimir los QR definitivos.</div>' : '') +
+      '<div class="row wrap" style="margin-bottom:12px"><select class="input" id="catf" style="width:auto"><option value="">Todas las categorías</option>' +
+      m.categorias.map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === S.catFiltro ? ' selected' : '') + '>' + esc(c.nombre) + (c.activa ? '' : ' (oculta)') + '</option>'; }).join('') + '</select>' +
+      '<input class="input" id="q" placeholder="Buscar…" value="' + esc(S.q) + '" style="width:auto;flex:1;min-width:160px"><button class="btn prim" data-newprod>+ Producto</button><button class="btn" data-cats>Categorías</button><button class="btn" data-cartaia title="Leer la carta desde fotos o un PDF">📷 Cargar carta con IA</button></div>' +
+      '<div class="card tbl-wrap"><table class="tbl"><thead><tr><th>Producto</th><th>Categoría</th><th class="r">Precio</th><th>Puntos</th><th>Estado</th><th>Validación</th><th></th></tr></thead><tbody>' +
+      list.map(function (p) {
+        return '<tr><td><strong>' + esc(p.nombre) + '</strong><div class="small muted">' + esc(p.id) + (p.grupos.length ? ' · opciones: ' + esc(p.grupos.join(', ')) : '') + (p.dias ? ' · <strong>solo ' + esc(p.dias.split(',').map(function (d) { return ['', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'][+d]; }).join(', ')) + '</strong>' : '') + '</div>' + (p.nota ? '<div class="small" style="color:#7a5a14">' + esc(p.nota) + '</div>' : '') + '</td>' +
+          '<td class="small">' + esc(cats[p.categoria] ? cats[p.categoria].nombre : p.categoria) + (variasEst() ? '<div><span class="chip' + (p.estacion ? ' mostaza' : '') + '" title="Estación que prepara este producto">' + esc(estNombre(p.estacion_efectiva)) + '</span></div>' : '') + '</td><td class="r num">' + gs(p.precio) + '</td>' +
+          '<td class="small">' + esc(p.puntos.replace('A_CAFE', 'Salón').replace('B_TAKEAWAY', 'Para llevar').replace(',', ', ')) + '</td>' +
+          '<td>' + (p.activo ? '' : '<span class="chip">Inactivo</span> ') + '<button class="btn small ' + (p.disponible ? '' : 'danger') + '" data-disp="' + esc(p.id) + '">' + (p.disponible ? 'Disponible' : 'Agotado') + '</button></td>' +
+          '<td><span class="chip ' + (p.validacion === 'APROBADO' ? 'oliva' : 'mostaza') + '">' + esc(p.validacion === 'APROBADO' ? 'Aprobado' : 'Por validar') + '</span></td>' +
+          '<td><button class="btn small" data-edit="' + esc(p.id) + '">Editar</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function editProd(id) {
+    var m = S.admin.menu, p = id ? m.productos.filter(function (x) { return x.id === id; })[0] : { id: '', categoria: S.catFiltro || m.categorias[0].id, nombre: '', descripcion: '', precio: 0, activo: true, disponible: true, puntos: 'A_CAFE,B_TAKEAWAY', grupos: [], orden: m.productos.length + 1, validacion: 'POR_VALIDAR', nota: '' };
+    var pts = p.puntos.split(','), cats0 = {}; m.categorias.forEach(function (c) { cats0[c.id] = c; });
+    var md = M.modal({
+      title: id ? 'Editar · ' + p.nombre : 'Nuevo producto', wide: true,
+      body: '<div class="grid2"><div><label class="f">Código</label><input class="input" data-f="producto_id" value="' + esc(p.id) + '"' + (id ? ' readonly' : ' placeholder="Ej.: ALMUERZO_DIA"') + '></div>' +
+        '<div><label class="f">Categoría</label><select class="input" data-f="categoria_id">' + m.categorias.map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === p.categoria ? ' selected' : '') + '>' + esc(c.nombre) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label class="f">Nombre</label><input class="input" data-f="nombre" maxlength="80" value="' + esc(p.nombre) + '"></div>' +
+        '<div><label class="f">Precio base (Gs.)</label><input class="input num" data-f="precio_gs" inputmode="numeric" value="' + p.precio + '"></div></div>' +
+        '<label class="f" style="margin-top:10px">Descripción</label><textarea class="input" data-f="descripcion" maxlength="300">' + esc(p.descripcion) + '</textarea>' +
+        '<div class="grid2" style="margin-top:10px"><div><div class="f">Disponible en</div><label class="check"><input type="checkbox" data-pt value="A_CAFE"' + (pts.indexOf('A_CAFE') >= 0 ? ' checked' : '') + '> Salón principal (Caja 01)</label>' +
+        ((window.MESA_LOCAL && window.MESA_LOCAL.sinTakeaway) ? '' : '<label class="check"><input type="checkbox" data-pt value="B_TAKEAWAY"' + (pts.indexOf('B_TAKEAWAY') >= 0 ? ' checked' : '') + '> Para llevar (Caja 02)</label>') +
+        '<label class="check"><input type="checkbox" data-f="activo"' + (p.activo ? ' checked' : '') + '> Activo en la carta</label><label class="check"><input type="checkbox" data-f="disponible"' + (p.disponible ? ' checked' : '') + '> Disponible ahora</label></div>' +
+        '<div><div class="f">Grupos de opciones</div><div style="max-height:200px;overflow:auto;border:1px solid var(--linea);border-radius:8px;padding:4px 8px">' +
+        m.grupos.map(function (g) { return '<label class="check"><input type="checkbox" data-gr value="' + esc(g.id) + '"' + (p.grupos.indexOf(g.id) >= 0 ? ' checked' : '') + '> ' + esc(g.nombre) + ' <span class="small muted">(' + esc(g.id) + ')</span></label>'; }).join('') + '</div></div></div>' +
+        '<div class="grid2" style="margin-top:10px"><div><label class="f">Orden</label><input class="input num" data-f="orden" inputmode="numeric" value="' + p.orden + '"></div>' +
+        '<div><label class="f">Validación comercial</label><select class="input" data-f="validacion"><option value="POR_VALIDAR"' + (p.validacion !== 'APROBADO' ? ' selected' : '') + '>Por validar</option><option value="APROBADO"' + (p.validacion === 'APROBADO' ? ' selected' : '') + '>Aprobado</option></select></div></div>' +
+        '<div class="f" style="margin-top:10px">Días que se sirve <span class="small muted">(sin marcar = todos los días; ej.: plato del día del menú semanal)</span></div><div class="row wrap" style="gap:4px 12px">' +
+        ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(function (t, i) { return '<label class="check"><input type="checkbox" data-dia value="' + (i + 1) + '"' + ((p.dias || '').split(',').indexOf(String(i + 1)) >= 0 ? ' checked' : '') + '> ' + t + '</label>'; }).join('') + '</div>' +
+        (variasEst() ? '<label class="f" style="margin-top:10px">Estación que lo prepara</label>' + estSelect('data-f="estacion"', p.estacion || '', 'Según la categoría' + (cats0[p.categoria] && cats0[p.categoria].estacion ? ' (' + estNombre(cats0[p.categoria].estacion) + ')' : '')) : '') +
+        (conArmador() || p.armador ? '<label class="f" style="margin-top:10px">Armá tu pedido (animación en la carta QR)</label><select class="input" data-f="armador">' +
+          [['', 'No: opciones en lista, como siempre'], ['PIZZA', '🍕 Pizza armable'], ['PORCION', '🍕 Porción (slice) armable'], ['HAMBURGUESA', '🍔 Hamburguesa armable']].map(function (o) { return '<option value="' + o[0] + '"' + ((p.armador || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+          '</select><p class="small muted" style="margin:4px 0 0">Usa sus grupos de opciones: un grupo de tipo <strong>Tamaño</strong>, uno de tipo <strong>Lo que trae</strong> (el cliente lo puede sacar) y los de agregados.' + (conArmador() ? '' : ' <strong>El local no tiene activo el Upgrade:</strong> la carta muestra la lista de siempre.') + '</p>' : '') +
+        '<label class="f" style="margin-top:10px">Nota interna</label><input class="input" data-f="nota" maxlength="300" value="' + esc(p.nota || '') + '">' +
+        (S.admin.plan.modulos.indexOf('FOTOS') >= 0 ? '<label class="f" style="margin-top:10px">Foto del plato (link)</label><input class="input" data-f="imagen" maxlength="500" placeholder="https://… (foto del plato) o imagenes/plato.jpg" value="' + esc(p.imagen || '') + '"><p class="small muted" style="margin:4px 0 0">Si está cargada, el cliente ve la foto en la carta del QR.</p>' : '<p class="small muted" style="margin-top:10px">Fotos de los platos en la carta: incluidas en los planes Gold y Premium.</p>') +
+        (S.admin.plan.modulos.indexOf('MENU3D') >= 0 ? '<label class="f" style="margin-top:10px">Modelo 3D (Menú 3D · Premium)</label><input class="input" data-f="modelo_3d" maxlength="300" placeholder="modelos/plato.glb o link https://….glb" value="' + esc(p.modelo_3d || '') + '"><p class="small muted" style="margin:4px 0 0">Archivo .glb del plato escaneado. Si está cargado, el cliente ve el botón 3D en la carta.</p>' : '') +
+        (p.fuente ? '<p class="small muted">Fuente: ' + esc(p.fuente) + '</p>' : ''),
+      foot: '<button class="btn grow" data-x>Cancelar</button><button class="btn prim grow" data-save>Guardar</button>'
+    });
+    md.$('[data-save]').onclick = function () {
+      var v = function (k) { var e = md.$('[data-f="' + k + '"]'); return e.type === 'checkbox' ? e.checked : e.value; };
+      var prod = {
+        producto_id: v('producto_id'), categoria_id: v('categoria_id'), nombre: v('nombre'), descripcion: v('descripcion'), precio_gs: M.parseGs(v('precio_gs')),
+        activo: v('activo'), disponible: v('disponible'), orden: parseInt(v('orden'), 10) || 0, validacion: v('validacion'), nota: v('nota'),
+        dias: M.$$('[data-dia]:checked', md.el).map(function (x) { return x.value; }).join(','),
+        puntos: M.$$('[data-pt]:checked', md.el).map(function (x) { return x.value; }).join(','), grupos: M.$$('[data-gr]:checked', md.el).map(function (x) { return x.value; }).join(',')
+      };
+      if (md.$('[data-f="modelo_3d"]')) prod.modelo_3d = v('modelo_3d').trim();
+      if (md.$('[data-f="imagen"]')) prod.imagen = v('imagen').trim();
+      if (md.$('[data-f="estacion"]')) prod.estacion = v('estacion');
+      if (md.$('[data-f="armador"]')) prod.armador = v('armador');
+      var guardar = function () { M.call('admin.product', { producto: prod }).then(function () { md.close(); M.toast('Producto guardado.', 'ok'); reload(); }, err); };
+      if (id && prod.precio_gs !== p.precio) {
+        M.confirmar('Cambio de precio', 'De ' + gs(p.precio) + ' a ' + gs(prod.precio_gs) + '. Los pedidos ya registrados conservan su precio.', 'Cambiar precio').then(function (ok) { if (ok) guardar(); });
+      } else guardar();
+    };
+  }
+  function editCats() {
+    var cats = S.admin.menu.categorias;
+    var md = M.modal({
+      title: 'Categorías', wide: true,
+      body: '<table class="tbl"><thead><tr><th>Código</th><th>Nombre</th><th>Orden</th><th>Visible</th>' + (variasEst() ? '<th>Estación</th>' : '') + '<th></th></tr></thead><tbody>' +
+        cats.concat([{ id: '', nombre: '', orden: cats.length + 1, activa: true, nota: '', estacion: '' }]).map(function (c, i) {
+          return '<tr data-row="' + i + '"><td><input class="input" data-c="id" value="' + esc(c.id) + '"' + (c.id ? ' readonly' : ' placeholder="NUEVA"') + '></td><td><input class="input" data-c="nombre" value="' + esc(c.nombre) + '">' + (c.nota ? '<div class="small" style="color:#7a5a14">' + esc(c.nota) + '</div>' : '') + '</td>' +
+            '<td><input class="input num" data-c="orden" value="' + c.orden + '" style="width:70px"></td><td><input type="checkbox" data-c="activa"' + (c.activa ? ' checked' : '') + '></td>' + (variasEst() ? '<td>' + estSelect('data-c="estacion"', c.estacion || '', (S.admin.estaciones[0] || {}).nombre + ' (por defecto)') + '</td>' : '') + '<td><button class="btn small" data-savecat="' + i + '">Guardar</button></td></tr>';
+        }).join('') + '</tbody></table>'
+    });
+    md.el.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-savecat]'); if (!b) return;
+      var tr = md.$('[data-row="' + b.getAttribute('data-savecat') + '"]'), g = function (k) { var x = tr.querySelector('[data-c="' + k + '"]'); return x.type === 'checkbox' ? x.checked : x.value; };
+      var cat = { categoria_id: g('id'), nombre: g('nombre'), orden: parseInt(g('orden'), 10) || 0, activa: g('activa'), nota: (cats.filter(function (x) { return x.id === g('id'); })[0] || {}).nota || '' };
+      if (tr.querySelector('[data-c="estacion"]')) cat.estacion = g('estacion');
+      M.call('admin.category', { categoria: cat }).then(function () { M.toast('Categoría guardada.', 'ok'); md.close(); reload(); }, err);
+    });
+  }
+
+  // ------------------------------------------------------------ grupos de opciones
+  function grupos() {
+    var gsx = S.admin.menu.grupos, usado = {};
+    S.admin.menu.productos.forEach(function (p) { p.grupos.forEach(function (g) { (usado[g] = usado[g] || []).push(p.nombre); }); });
+    return '<div class="row" style="margin-bottom:12px"><p class="muted grow" style="margin:0">Grupos de opciones: pan, sabor, tamaño, extras. “Mín.” 1 = elección obligatoria. La diferencia de precio se suma al precio base.</p><button class="btn prim" data-editgrp="">+ Grupo</button></div>' +
+      '<div class="grid2">' + gsx.map(function (g) {
+        return '<div class="card pad"><div class="row"><h3 class="grow">' + esc(g.nombre) + ' <span class="small muted">' + esc(g.id) + '</span></h3>' + (g.activo ? '' : '<span class="chip">Inactivo</span>') + '<button class="btn small" data-editgrp="' + esc(g.id) + '">Editar</button></div>' +
+          '<div class="small muted">' + (g.tipo === 'TAMANO' ? '<span class="chip">Tamaño</span> ' : g.tipo === 'QUITAR' ? '<span class="chip">Lo que trae (se puede sacar)</span> ' : '') + (g.repetir > 1 ? '<span class="chip">Hasta x' + g.repetir + ' cada uno</span> ' : '') + 'Mín. ' + g.min + ' · Máx. ' + g.max + ' · Usado en: ' + esc((usado[g.id] || ['—']).join(', ')) + '</div>' +
+          '<div class="small" style="margin-top:6px">' + g.opciones.map(function (o) { return (o.activo ? '' : '<s>') + esc(o.nombre) + (o.delta ? ' (+' + gs(o.delta) + ')' : '') + (o.activo ? '' : '</s>'); }).join(' · ') + '</div></div>';
+      }).join('') + '</div>';
+  }
+  function editGrupo(id) {
+    var g = id ? S.admin.menu.grupos.filter(function (x) { return x.id === id; })[0] : { id: '', nombre: '', min: 1, max: 1, activo: true, opciones: [], tipo: '', repetir: 1 };
+    g = Object.assign({}, g, { tipo: g.tipo || '', repetir: g.repetir || 1 });
+    var ops = g.opciones.map(function (o) { return { opcion_id: o.id, nombre: o.nombre, delta_gs: o.delta, activo: o.activo, dibujo: o.dibujo || '' }; });
+    var verArm = conArmador() || !!g.tipo || g.repetir > 1 || ops.some(function (o) { return o.dibujo; });
+    var md = M.modal({ title: id ? 'Grupo · ' + g.nombre : 'Nuevo grupo', wide: true, body: '', foot: '<button class="btn grow" data-x>Cancelar</button><button class="btn prim grow" data-save>Guardar</button>' });
+    function paint() {
+      md.$('.sheet-b').innerHTML = '<div class="grid2"><div><label class="f">Código</label><input class="input" data-g="id" value="' + esc(g.id) + '"' + (id ? ' readonly' : ' placeholder="G_ALMUERZO_GUARNICION"') + '></div><div><label class="f">Nombre visible</label><input class="input" data-g="nombre" value="' + esc(g.nombre) + '"></div>' +
+        '<div><label class="f">Mínimo a elegir</label><input class="input num" data-g="min" value="' + g.min + '"></div><div><label class="f">Máximo a elegir</label><input class="input num" data-g="max" value="' + g.max + '"></div></div>' +
+        '<div class="grid2"><div><label class="f">Tipo de grupo</label><select class="input" data-g="tipo">' +
+          [['', 'Opciones o agregados (lo de siempre)'], ['TAMANO', 'Tamaño (en la pizza armable cambia el tamaño)'], ['QUITAR', 'Lo que trae el plato (el cliente lo puede sacar, sin costo)']].map(function (o) { return '<option value="' + o[0] + '"' + (g.tipo === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+        '<div><label class="f">Cada opción se puede pedir hasta</label><select class="input" data-g="repetir"' + (g.tipo ? ' disabled' : '') + '>' + [1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (g.repetir === n ? ' selected' : '') + '>' + (n === 1 ? '1 vez' : n + ' veces (doble, triple…)') + '</option>'; }).join('') + '</select></div></div>' +
+        '<label class="check"><input type="checkbox" data-g="activo"' + (g.activo ? ' checked' : '') + '> Grupo activo</label>' +
+        '<table class="tbl" style="margin-top:8px"><thead><tr><th>Opción</th><th>+ Gs.</th>' + (verArm ? '<th>Dibujo (Armá tu pedido)</th>' : '') + '<th>Activa</th></tr></thead><tbody>' + ops.map(function (o, i) {
+          return '<tr><td><input class="input" data-o="nombre" data-i="' + i + '" value="' + esc(o.nombre) + '"><div class="small muted">' + esc(o.opcion_id || 'nueva') + '</div></td><td><input class="input num" data-o="delta_gs" data-i="' + i + '" value="' + o.delta_gs + '" style="width:110px"' + (g.tipo === 'QUITAR' ? ' readonly' : '') + '></td>' +
+            (verArm ? '<td><select class="input" data-o="dibujo" data-i="' + i + '">' + DIBUJOS.map(function (d) { return '<option value="' + d[0] + '"' + (o.dibujo === d[0] ? ' selected' : '') + '>' + d[1] + '</option>'; }).join('') + '</select></td>' : '') +
+            '<td><input type="checkbox" data-o="activo" data-i="' + i + '"' + (o.activo ? ' checked' : '') + '></td></tr>';
+        }).join('') + '</tbody></table><button class="btn small" data-addop style="margin-top:8px">+ Opción</button>' +
+        '<p class="small muted">Las opciones no se borran (para conservar el historial): desactivalas.</p>';
+    }
+    function collect() {
+      M.$$('[data-g]', md.el).forEach(function (e) { var k = e.getAttribute('data-g'); g[k] = e.type === 'checkbox' ? e.checked : (k === 'min' || k === 'max' || k === 'repetir' ? parseInt(e.value, 10) || 0 : e.value); });
+      if (g.tipo) g.repetir = 1;
+      if (g.tipo === 'QUITAR') ops.forEach(function (o) { o.delta_gs = 0; });
+      M.$$('[data-o]', md.el).forEach(function (e) { var o = ops[+e.getAttribute('data-i')], k = e.getAttribute('data-o'); o[k] = e.type === 'checkbox' ? e.checked : (k === 'delta_gs' ? M.parseGs(e.value) : e.value); });
+    }
+    md.el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-addop]')) { collect(); ops.push({ opcion_id: '', nombre: '', delta_gs: 0, activo: true, dibujo: '' }); paint(); }
+      if (e.target.closest('[data-save]')) {
+        collect();
+        var gid = String(g.id || '').toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+        var n = 0;
+        ops.forEach(function (o) { if (!o.opcion_id) { do { n++; o.opcion_id = gid + '_' + n; } while (ops.some(function (x) { return x !== o && x.opcion_id === o.opcion_id; })); } });
+        M.call('admin.group', { grupo: { grupo_id: gid, nombre: g.nombre, min: g.min, max: g.max, activo: g.activo, tipo: g.tipo, repetir: g.repetir, opciones: ops.filter(function (o) { return o.nombre.trim(); }) } })
+          .then(function () { md.close(); M.toast('Grupo guardado.', 'ok'); reload(); }, err);
+      }
+    });
+    md.el.addEventListener('change', function (e) { if (e.target.matches('[data-g="tipo"]')) { collect(); if (g.tipo) g.repetir = 1; paint(); } });
+    paint();
+  }
+
+  // ------------------------------------------------------------ mesas y QR
+  function urlQr(token) { return S.base.replace(/\/$/, '') + '/menu.html?t=' + encodeURIComponent(token); }
+  function mesas() {
+    var tk = S.admin.puntos.filter(function (p) { return p.punto_id === 'B_TAKEAWAY' && p.activo !== 'NO'; })[0];
+    return '<div class="card pad" style="margin-bottom:12px"><label class="f">Dirección pública del sistema (base de los QR)</label><div class="row"><input class="input" id="base" value="' + esc(S.base) + '"><button class="btn" data-savebase>Usar</button></div>' +
+      '<p class="small muted" style="margin-bottom:0">Debe ser la dirección final (ej. el dominio de Netlify). Si cambia, reimprimí los QR. Cada QR tiene un código secreto: cambiar el número en la dirección no permite pedir para otra mesa.</p></div>' +
+      '<div class="row wrap" style="margin-bottom:12px"><button class="btn prim" data-newmesa>+ Mesa</button><button class="btn" data-printqr>Imprimir todos los QR</button></div>' +
+      '<div class="card tbl-wrap"><table class="tbl"><thead><tr><th>Mesa</th><th>Zona</th><th>Estado</th><th>Enlace</th><th></th></tr></thead><tbody>' +
+      S.admin.mesas.map(function (m) {
+        return '<tr><td><strong>' + esc(m.nombre) + '</strong><div class="small muted">' + esc(m.mesa_id) + '</div></td><td>' + esc(m.zona || '—') + '</td><td>' + (m.activa === 'SI' ? '<span class="chip oliva">Activa</span>' : '<span class="chip">Inactiva</span>') + '</td>' +
+          '<td class="small"><a href="' + esc(urlQr(m.qr_token)) + '" target="_blank" rel="noopener">' + esc(urlQr(m.qr_token)) + '</a></td>' +
+          '<td style="white-space:nowrap"><button class="btn small" data-qr="' + esc(m.mesa_id) + '">Ver QR</button> <button class="btn small" data-editmesa="' + esc(m.mesa_id) + '">Editar</button> <button class="btn small danger" data-rot="' + esc(m.mesa_id) + '">Nuevo código</button></td></tr>';
+      }).join('') +
+      (tk ? '<tr><td><strong>Para llevar (mostrador)</strong><div class="small muted">B_TAKEAWAY</div></td><td>—</td><td><span class="chip azul">Punto</span></td><td class="small"><a href="' + esc(urlQr(tk.qr_token)) + '" target="_blank" rel="noopener">' + esc(urlQr(tk.qr_token)) + '</a></td>' +
+        '<td style="white-space:nowrap"><button class="btn small" data-qr="B_TAKEAWAY">Ver QR</button> <button class="btn small danger" data-rotp="B_TAKEAWAY">Nuevo código</button></td></tr>' : '') +
+      '</tbody></table></div>';
+  }
+  function qrCard(nombre, token, sub, url) {
+    return '<div class="qr-card"><img src="assets/logo-local.png" alt="Tu Local"><div class="mn">' + esc(nombre) + '</div>' + QR.svg(url || urlQr(token), { margin: 2 }) +
+      '<div class="small">' + esc(sub || 'Escaneá para ver la carta y pedir') + '</div></div>';
+  }
+  function verQr(id) {
+    var m = S.admin.mesas.filter(function (x) { return x.mesa_id === id; })[0], tk = S.admin.puntos.filter(function (p) { return p.punto_id === id; })[0];
+    var html = m ? qrCard(m.nombre, m.qr_token) : qrCard('Para llevar', tk.qr_token, 'Pedí desde tu celular y retirá en el mostrador');
+    M.modal({ title: 'Código QR', body: '<div style="max-width:280px;margin:0 auto">' + html + '</div>', foot: '<button class="btn prim block" data-p>Imprimir</button>' }).$('[data-p]').onclick = function () { printQr([html]); };
+  }
+  function printQr(cards) {
+    var div = document.createElement('div'); div.className = 'print-only';
+    div.innerHTML = '<div class="qr-sheet">' + cards.join('') + '</div>';
+    M.$('#main').appendChild(div); window.print(); setTimeout(function () { div.remove(); }, 500);
+  }
+  function editMesa(id) {
+    var m = id ? S.admin.mesas.filter(function (x) { return x.mesa_id === id; })[0] : { mesa_id: '', numero: S.admin.mesas.length + 1, nombre: '', zona: '', activa: 'SI' };
+    var md = M.modal({
+      title: id ? 'Editar ' + m.nombre : 'Nueva mesa',
+      body: '<label class="f">Número</label><input class="input num" data-n value="' + m.numero + '"' + (id ? ' readonly' : '') + '><label class="f" style="margin-top:8px">Nombre visible</label><input class="input" data-nm value="' + esc(m.nombre) + '" placeholder="Mesa ' + m.numero + '">' +
+        '<label class="f" style="margin-top:8px">Zona (opcional)</label><input class="input" data-z value="' + esc(m.zona) + '" placeholder="Interior / Patio"><label class="check"><input type="checkbox" data-a' + (m.activa === 'SI' ? ' checked' : '') + '> Activa</label>',
+      foot: '<button class="btn grow" data-x>Cancelar</button><button class="btn prim grow" data-s>Guardar</button>'
+    });
+    md.$('[data-s]').onclick = function () {
+      M.call('admin.mesa', { mesa: { mesa_id: m.mesa_id, numero: parseInt(md.$('[data-n]').value, 10), nombre: md.$('[data-nm]').value, zona: md.$('[data-z]').value, activa: md.$('[data-a]').checked } })
+        .then(function () { md.close(); M.toast('Mesa guardada.', 'ok'); reload(); }, err);
+    };
+  }
+
+  // ------------------------------------------------------------ usuarios
+  function usuarios() {
+    // Activos primero (admin arriba), por rol y nombre; los inactivos quedan ocultos salvo que se pidan.
+    var ORDEN = { ADMIN: 0, MOZO: 1, COCINA: 2, CAJA: 3 };
+    var todos = S.admin.usuarios.slice().sort(function (a, b) {
+      return (a.activo === 'SI' ? 0 : 1) - (b.activo === 'SI' ? 0 : 1) || (ORDEN[a.rol] - ORDEN[b.rol]) || String(a.caja_id).localeCompare(String(b.caja_id)) || String(a.usuario_id).localeCompare(String(b.usuario_id));
+    });
+    var inactivos = todos.filter(function (u) { return u.activo !== 'SI'; }).length;
+    var lista = S.verInactivos ? todos : todos.filter(function (u) { return u.activo === 'SI'; });
+    return '<div class="row" style="margin-bottom:12px"><p class="muted grow" style="margin:0">Cada persona con su usuario y PIN propio: así queda registrado quién tomó, cobró o anuló cada cosa.</p>' +
+      (inactivos ? '<button class="btn" data-verinact>' + (S.verInactivos ? 'Ocultar inactivos' : 'Ver inactivos (' + inactivos + ')') + '</button> ' : '') +
+      '<button class="btn prim" data-edituser="">+ Usuario</button></div>' +
+      '<div class="card tbl-wrap"><table class="tbl"><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Caja</th><th>Estado</th><th></th></tr></thead><tbody>' +
+      lista.map(function (u) {
+        var bloq = Number(u.bloqueado_hasta) > Date.now();
+        return '<tr><td><strong>' + esc(u.usuario_id) + '</strong></td><td>' + esc(u.nombre) + '</td><td>' + esc(ROL_TXT[u.rol] || u.rol) + (u.para_llevar === 'SI' ? ' <span class="chip mostaza">🥡 Para llevar</span>' : '') + '</td><td>' + esc(u.caja_id || '—') + '</td>' +
+          '<td>' + (u.activo === 'SI' ? '<span class="chip oliva">Activo</span>' : '<span class="chip">Inactivo</span>') + (bloq ? ' <span class="chip vino">Bloqueado</span>' : '') + '</td>' +
+          '<td style="white-space:nowrap"><button class="btn small" data-edituser="' + esc(u.usuario_id) + '">Editar</button> <button class="btn small" data-kick="' + esc(u.usuario_id) + '">Cerrar sesiones</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function editUser(id) {
+    var u = id ? S.admin.usuarios.filter(function (x) { return x.usuario_id === id; })[0] : { usuario_id: '', nombre: '', rol: 'MOZO', caja_id: '', activo: 'SI', para_llevar: 'NO' };
+    var md = M.modal({
+      title: id ? 'Editar ' + u.nombre : 'Nuevo usuario',
+      body: '<label class="f">Usuario (para ingresar)</label><input class="input" data-u value="' + esc(u.usuario_id) + '"' + (id ? ' readonly' : ' placeholder="ej. maria"') + ' autocapitalize="none">' +
+        '<label class="f" style="margin-top:8px">Nombre</label><input class="input" data-n value="' + esc(u.nombre) + '">' +
+        '<label class="f" style="margin-top:8px">Rol</label><select class="input" data-r>' + Object.keys(ROL_TXT).map(function (r) { return '<option value="' + r + '"' + (r === u.rol ? ' selected' : '') + '>' + ROL_TXT[r] + '</option>'; }).join('') + '</select>' +
+        '<div data-cw><label class="f" style="margin-top:8px">Caja que opera</label><select class="input" data-c><option value="CAJA_A"' + (u.caja_id === 'CAJA_A' ? ' selected' : '') + '>Caja 01 — Salón</option><option value="CAJA_B"' + (u.caja_id === 'CAJA_B' ? ' selected' : '') + '>Caja 02 — Para llevar</option></select></div>' +
+        '<label class="f" style="margin-top:8px">' + (id ? 'Nuevo PIN (dejar vacío para no cambiar)' : 'PIN (4 a 8 dígitos)') + '</label><input class="input" data-p type="password" inputmode="numeric" autocomplete="new-password">' +
+        '<div data-lw><label class="check"><input type="checkbox" data-l' + (u.para_llevar === 'SI' ? ' checked' : '') + '> Atiende pedidos para llevar (QR y web)</label><div class="small muted">Si en Configuración <code>para_llevar_qr_atiende</code> es EQUIPO, este mozo acepta, rechaza y entrega los pedidos para llevar (por ejemplo, el mozo de barra).</div></div>' +
+        '<label class="check"><input type="checkbox" data-a' + (u.activo === 'SI' ? ' checked' : '') + '> Activo</label>',
+      foot: '<button class="btn grow" data-x>Cancelar</button><button class="btn prim grow" data-s>Guardar</button>'
+    });
+    function sync() { md.$('[data-cw]').classList.toggle('hidden', md.$('[data-r]').value !== 'CAJA'); md.$('[data-lw]').classList.toggle('hidden', md.$('[data-r]').value !== 'MOZO'); }
+    md.$('[data-r]').onchange = sync; sync();
+    md.$('[data-s]').onclick = function () {
+      M.call('admin.user', { usuario: { usuario_id: md.$('[data-u]').value.trim(), nombre: md.$('[data-n]').value, rol: md.$('[data-r]').value, caja_id: md.$('[data-c]').value, pin: md.$('[data-p]').value.trim(), activo: md.$('[data-a]').checked, para_llevar: md.$('[data-l]').checked } })
+        .then(function () { md.close(); M.toast('Usuario guardado.', 'ok'); reload(); }, err);
+    };
+  }
+
+  // ------------------------------------------------------------ configuración
+  var PLAN_TXT = { BASICO: 'Básico', GOLD: 'Gold', PREMIUM: 'Premium', A_MEDIDA: 'A medida' };
+  function config() {
+    var pl = S.admin.plan || { nombre: 'BASICO', modulos: [] };
+    return '<div class="card pad row wrap" style="margin-bottom:12px"><div class="grow"><div class="small muted">Plan contratado</div><h2 style="margin:2px 0">Mesa Pya\'e ' + esc(PLAN_TXT[pl.nombre] || pl.nombre) + '</h2>' +
+      '<div class="small muted">' + (pl.modulos.length ? 'Incluye: ' + pl.modulos.map(function (m) { return { FOTOS: 'Fotos de los platos', MENU3D: 'Menú 3D (' + (pl.platos_3d || 0) + ' platos)', RESENAS: 'Reseñas', RECOMPENSAS: 'Recompensas', EKUATIAI: "e-Kuatia'i", STOCK: 'Mesa Viru', ARMADOR: 'Armá tu pedido', ATENCION: 'Atención Integrada (WhatsApp)' }[m] || m; }).join(', ') : 'Pedidos, cocina, cajas y administración') + '</div></div>' +
+      '<span class="small muted" style="max-width:280px">Para cambiar de plan contactá a Ser o Límites.</span></div>' +
+      '<div class="card tbl-wrap"><table class="tbl"><thead><tr><th>Parámetro</th><th>Valor</th><th></th></tr></thead><tbody>' +
+      S.admin.config.map(function (c) {
+        return '<tr><td><strong>' + esc(c.clave) + '</strong><div class="small muted">' + esc(c.descripcion) + '</div></td><td>' + (c.clave === 'para_llevar_whatsapp' ? '<select class="input" data-cfg="' + esc(c.clave) + '">' + [['NO', 'NO · no se pide'], ['OPCIONAL', 'OPCIONAL · se pide, no es obligatorio'], ['OBLIGATORIO', 'OBLIGATORIO · se pide siempre']].map(function (o) { return '<option value="' + o[0] + '"' + (c.valor === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' : c.clave === 'para_llevar_qr_atiende' ? '<select class="input" data-cfg="' + esc(c.clave) + '"><option value="CAJA"' + (c.valor !== 'EQUIPO' ? ' selected' : '') + '>CAJA · los atiende y cobra la caja de para llevar</option><option value="EQUIPO"' + (c.valor === 'EQUIPO' ? ' selected' : '') + '>EQUIPO · mozos marcados + caja del salón</option></select>' : '<input class="input" data-cfg="' + esc(c.clave) + '" value="' + esc(c.valor) + '">') + '</td><td><button class="btn small" data-savecfg="' + esc(c.clave) + '">Guardar</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function auditoria() {
+    if (!S.audit) return '<div class="empty">Cargando…</div>';
+    return '<div class="row" style="margin-bottom:10px"><p class="muted grow" style="margin:0">Últimos 300 eventos (cobros, cancelaciones, cambios de precio, usuarios, accesos).</p><button class="btn" data-reaudit>Actualizar</button></div>' +
+      '<div class="card tbl-wrap"><table class="tbl"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>Detalle</th></tr></thead><tbody>' +
+      S.audit.map(function (a) { return '<tr><td class="small">' + M.fechaHora(a.fecha) + '</td><td>' + esc(a.usuario_id) + '</td><td><strong>' + esc(a.accion) + '</strong></td><td class="small">' + esc(a.entidad) + ' ' + esc(a.entidad_id) + '</td><td class="small" style="max-width:420px;word-break:break-word">' + esc(a.detalle) + '</td></tr>'; }).join('') +
+      '</tbody></table></div>';
+  }
+
+  // ------------------------------------------------------------ recompensas (módulo premium)
+  function cargarRec() { return M.call('rec.admin', {}).then(function (r) { S.rec = r; }, function () { S.rec = { licencia: false }; }); }
+  function recCfgVal(k) { var x = (S.rec.config || []).filter(function (c) { return c.clave === k; })[0]; return x ? x.valor : ''; }
+  function recompensas() {
+    var R = S.rec; if (!R) return '<div class="empty">Cargando…</div>';
+    var st = R.stats, activo = recCfgVal('rec_activo') === 'SI', P = R.programa;
+    var q = (S.recQ || '').toLowerCase();
+    var cls = R.clientes.filter(function (c) { return !q || (c.nombre + ' ' + c.celular + ' ' + c.codigo).toLowerCase().indexOf(q) >= 0; });
+    var prods = S.admin.menu.productos.slice().sort(function (a, b) { return a.nombre < b.nombre ? -1 : 1; });
+    if (!S.recPremios) S.recPremios = R.premios.filter(function (p) { return p.activo === 'SI'; }).map(function (p) { return { premio_id: p.premio_id, tipo: p.tipo, sellos: p.sellos, nombre: p.nombre, producto_id: p.producto_id, valor_gs: p.valor_gs, costo_gs: p.costo_gs }; });
+    var cumple = S.recPremios.filter(function (p) { return p.tipo === 'CUMPLE'; })[0];
+    var porSellos = S.recPremios.filter(function (p) { return p.tipo !== 'CUMPLE'; });
+    function prodSel(p, i) {
+      return '<select class="input" style="min-width:220px" data-rp="' + i + '" data-k="producto_id"><option value="">— Valor fijo en Gs. —</option>' + prods.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === p.producto_id ? ' selected' : '') + '>' + esc(x.nombre) + ' · ' + gs(x.precio) + '</option>'; }).join('') + '</select>';
+    }
+    function fila(p) {
+      var i = S.recPremios.indexOf(p);
+      return '<tr><td>' + (p.tipo === 'CUMPLE' ? '🎂' : '<input class="input num" style="width:70px" data-rp="' + i + '" data-k="sellos" inputmode="numeric" value="' + esc(p.sellos) + '">') + '</td>' +
+        '<td><input class="input" style="min-width:200px" data-rp="' + i + '" data-k="nombre" maxlength="60" value="' + esc(p.nombre) + '" placeholder="Ej.: 1 café gratis"></td><td>' + prodSel(p, i) + '</td>' +
+        '<td><input class="input num" style="width:110px" data-rp="' + i + '" data-k="valor_gs" inputmode="numeric" value="' + (p.producto_id ? '' : esc(p.valor_gs || '')) + '"' + (p.producto_id ? ' disabled placeholder="precio del producto"' : '') + '></td>' +
+        '<td><input class="input num" style="width:110px" data-rp="' + i + '" data-k="costo_gs" inputmode="numeric" value="' + esc(p.costo_gs || '') + '"></td>' +
+        '<td><button class="btn ghost small" data-rpdel="' + i + '" aria-label="Quitar">✕</button></td></tr>';
+    }
+    var link = S.base.replace(/\/?$/, '/') + 'tarjeta.html';
+    return '<div class="row wrap" style="margin-bottom:12px"><h2 class="grow">' + esc(P.nombre) + ' <span class="chip rec">Premium</span></h2>' +
+      '<span class="chip ' + (activo ? 'oliva' : 'vino') + '">' + (activo ? 'Programa activo' : 'Programa pausado') + '</span>' +
+      '<button class="btn ' + (activo ? '' : 'prim') + '" data-recactivo="' + (activo ? 'NO' : 'SI') + '">' + (activo ? 'Pausar' : 'Activar programa') + '</button></div>' +
+      '<div class="kpis">' + kpi('Clientes en el club', st.clientes, st.altas_30d + ' nuevos en 30 días') + kpi('Volvieron', st.tasa_retorno + '%', st.recurrentes + ' con 2 o más visitas') +
+      kpi('Sellos (30 días)', st.sellos_30d) + kpi('Ventas del club (30 días)', gs(st.ventas_club_30d_gs), st.cobros_club_30d + ' cobros') +
+      kpi('Premios canjeados', st.cupones_canjeados, st.cupones_disponibles + ' por usar') + kpi('Costo de premios', gs(st.costo_premios_gs)) + '</div>' +
+      '<div class="card pad" style="margin-top:14px"><h2>Premios</h2><p class="small muted">Al llegar a cada cantidad de sellos el cliente gana el premio; la tarjeta se completa con el último y vuelve a empezar. El costo es interno: el cliente no lo ve.</p>' +
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Sellos</th><th>Premio</th><th>Producto de la carta</th><th>Valor</th><th>Costo interno</th><th></th></tr></thead><tbody>' +
+      porSellos.sort(function (a, b) { return (+a.sellos || 0) - (+b.sellos || 0); }).map(fila).join('') + (cumple ? fila(cumple) : '') + '</tbody></table></div>' +
+      '<div class="row wrap" style="margin-top:8px"><button class="btn small" data-rpadd="SELLOS">+ Premio por sellos</button>' + (cumple ? '' : '<button class="btn small" data-rpadd="CUMPLE">+ Premio de cumpleaños</button>') +
+      '<span class="grow"></span><button class="btn prim" data-rpsave>Guardar premios</button></div></div>' +
+      '<div class="grid2" style="margin-top:14px"><div class="card pad"><h2>Reglas</h2>' +
+      '<label class="f">Nombre del programa</label><input class="input" data-rc="rec_nombre" value="' + esc(recCfgVal('rec_nombre')) + '" maxlength="40">' +
+      '<label class="f" style="margin-top:8px">Mensaje de la tarjeta</label><input class="input" data-rc="rec_mensaje" value="' + esc(recCfgVal('rec_mensaje')) + '" maxlength="120">' +
+      '<div class="row" style="margin-top:8px"><div class="grow"><label class="f">Compra mínima por sello (Gs.)</label><input class="input num" data-rc="rec_minimo_gs" inputmode="numeric" value="' + esc(recCfgVal('rec_minimo_gs')) + '"></div>' +
+      '<div class="grow"><label class="f">Vencimiento de premios (días, 0 = no vence)</label><input class="input num" data-rc="rec_vence_dias" inputmode="numeric" value="' + esc(recCfgVal('rec_vence_dias')) + '"></div></div>' +
+      '<div class="row" style="margin-top:8px"><div class="grow"><label class="f">Ícono del sello</label><select class="input" data-rc="rec_icono">' + [['cafe', '☕ Café'], ['pizza', '🍕 Pizza'], ['estrella', '⭐ Estrella']].map(function (o) { return '<option value="' + o[0] + '"' + (recCfgVal('rec_icono') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="grow"><label class="f">Un sello por día</label><select class="input" data-rc="rec_un_sello_por_dia"><option value="SI"' + (recCfgVal('rec_un_sello_por_dia') === 'SI' ? ' selected' : '') + '>Sí, máximo uno por día</option><option value="NO"' + (recCfgVal('rec_un_sello_por_dia') === 'NO' ? ' selected' : '') + '>No, uno por cada cobro</option></select></div></div>' +
+      '<div class="row" style="margin-top:8px"><div class="grow"><label class="f">QR del club en los tickets</label><select class="input" data-rc="rec_ticket_qr"><option value="SI"' + (recCfgVal('rec_ticket_qr') !== 'NO' ? ' selected' : '') + '>Sí, en el comprobante y el ticket para llevar</option><option value="NO"' + (recCfgVal('rec_ticket_qr') === 'NO' ? ' selected' : '') + '>No</option></select></div></div>' +
+      '<label class="f" style="margin-top:8px">Mensaje al pie de los tickets</label><input class="input" data-rc="rec_ticket_mensaje" value="' + esc(recCfgVal('rec_ticket_mensaje')) + '" maxlength="120" placeholder="Ej.: ¡Gracias! Seguinos en @tulocal">' +
+      '<button class="btn prim" style="margin-top:10px" data-rcsave>Guardar reglas</button></div>' +
+      '<div class="card pad"><h2>Alta de clientes</h2><p class="small muted">Imprimí este QR para el mostrador y las mesas: el cliente escanea, pone nombre y celular y recibe su tarjeta.</p>' +
+      '<div class="row"><div style="width:140px;flex:none">' + QR.svg(link, { margin: 1 }) + '</div><div class="grow small"><div style="word-break:break-all">' + esc(link) + '</div><button class="btn small" style="margin-top:8px" data-recqr>Imprimir cartel</button></div></div></div></div>' +
+      (R.cumples_mes.length ? '<div class="section-h"><h2>Cumpleaños de este mes</h2><span class="badge">' + R.cumples_mes.length + '</span></div><div class="row wrap">' + R.cumples_mes.map(function (c) {
+        return '<a class="chip rec" target="_blank" rel="noopener" href="https://wa.me/' + esc(waNum(c.celular)) + '?text=' + encodeURIComponent('¡Feliz cumpleaños, ' + c.nombre + '! Te esperamos en ' + S.admin.config.filter(function (x) { return x.clave === 'nombre_negocio'; })[0].valor + ' con un regalo 🎂') + '">🎂 ' + esc(c.nombre) + ' · ' + esc(c.cumple.slice(3) + '/' + c.cumple.slice(0, 2)) + '</a>';
+      }).join('') + '</div>' : '') +
+      '<div class="section-h"><h2>Clientes</h2><span class="badge">' + R.clientes.length + '</span><span class="grow"></span><input class="input" id="recq" placeholder="Buscar nombre, celular o código" value="' + esc(S.recQ || '') + '" style="max-width:260px"><button class="btn" data-reccsv>Exportar CSV</button></div>' +
+      (cls.length ? '<div class="card tbl-wrap"><table class="tbl"><thead><tr><th>Cliente</th><th>Celular</th><th>Sellos</th><th class="r">Visitas</th><th class="r">Premios</th><th>Última visita</th><th>Cumple</th><th></th></tr></thead><tbody>' +
+        cls.slice(0, 300).map(function (c) {
+          return '<tr' + (c.activo ? '' : ' style="opacity:.5"') + '><td><strong>' + esc(c.nombre) + '</strong><div class="small muted">' + esc(c.codigo) + ' · ' + esc(c.origen) + '</div></td><td>' + esc(c.celular) + '</td>' +
+            '<td>' + c.sellos + ' / ' + c.meta + (c.ciclos ? ' <span class="chip">' + c.ciclos + ' completas</span>' : '') + '</td><td class="r num">' + c.visitas + '</td><td class="r">' + (c.cupones_n ? '🎁 ' + c.cupones_n : '—') + '</td>' +
+            '<td class="small">' + (c.ultima_visita ? M.fechaHora(c.ultima_visita) : '—') + '</td><td class="small">' + (c.cumple ? esc(c.cumple.slice(3) + '/' + c.cumple.slice(0, 2)) : '') + '</td>' +
+            '<td><button class="btn small" data-reccli="' + esc(c.cliente_id) + '">Ver</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">' + (q ? 'Sin resultados.' : 'Todavía no hay clientes. Imprimí el QR de alta o registralos desde la caja.') + '</div>');
+  }
+  function waNum(cel) { var d = String(cel || '').replace(/[^0-9]/g, ''); return /^09\d{8}$/.test(d) ? '595' + d.slice(1) : d; }
+  function recSinLicencia() {
+    return '<div class="card pad" style="max-width:640px"><h2>Recompensas <span class="chip rec">Premium</span></h2><p>Tarjeta de sellos digital integrada a la caja: el cliente suma un sello en cada visita, gana premios y vuelve. Vos ves quién vuelve, cuánto compra y sus cumpleaños.</p>' +
+      '<p class="muted">Este módulo no está contratado en este local. Consultá a Ser o Límites para activarlo.</p></div>';
+  }
+  function recClick(e) {
+    var t;
+    if ((t = e.target.closest('[data-recactivo]'))) {
+      var v = t.getAttribute('data-recactivo');
+      M.call('rec.config', { config: { rec_activo: v } }).then(function () { M.toast(v === 'SI' ? 'Programa activado: la caja ya puede sumar sellos.' : 'Programa pausado.', 'ok'); S.recPremios = null; cargarRec().then(render); }, err);
+      return true;
+    }
+    if ((t = e.target.closest('[data-rpadd]'))) {
+      var tipo = t.getAttribute('data-rpadd'), max = 0; S.recPremios.forEach(function (p) { if (p.tipo !== 'CUMPLE') max = Math.max(max, +p.sellos || 0); });
+      S.recPremios.push({ tipo: tipo, sellos: tipo === 'CUMPLE' ? 0 : max + 4, nombre: '', producto_id: '', valor_gs: '', costo_gs: '' }); render(); return true;
+    }
+    if ((t = e.target.closest('[data-rpdel]'))) { S.recPremios.splice(+t.getAttribute('data-rpdel'), 1); render(); return true; }
+    if (e.target.closest('[data-rpsave]')) {
+      var pl = S.recPremios.map(function (p) { return { premio_id: p.premio_id, tipo: p.tipo, sellos: +p.sellos || 0, nombre: p.nombre, producto_id: p.producto_id, valor_gs: M.parseGs(p.valor_gs), costo_gs: M.parseGs(p.costo_gs) }; });
+      M.call('rec.config', { premios: pl }).then(function () { M.toast('Premios guardados.', 'ok'); S.recPremios = null; cargarRec().then(render); }, err);
+      return true;
+    }
+    if (e.target.closest('[data-rcsave]')) {
+      var cfg = {}; M.$$('[data-rc]').forEach(function (x) { cfg[x.getAttribute('data-rc')] = x.value.trim(); });
+      M.call('rec.config', { config: cfg }).then(function () { M.toast('Reglas guardadas.', 'ok'); cargarRec().then(render); }, err);
+      return true;
+    }
+    if (e.target.closest('[data-recqr]')) {
+      var P = S.rec.programa, link = S.base.replace(/\/?$/, '/') + 'tarjeta.html';
+      printQr([qrCard(P.nombre, null, P.premios.map(function (p) { return p.sellos + ' sellos: ' + p.nombre; }).join(' · ') + ' — Escaneá y sacá tu tarjeta gratis', link)]);
+      return true;
+    }
+    if (e.target.closest('[data-reccsv]')) {
+      var rows = [['nombre', 'celular', 'codigo', 'sellos', 'tarjetas_completas', 'visitas', 'premios_disponibles', 'ultima_visita', 'cumple', 'alta', 'origen']].concat(S.rec.clientes.map(function (c) { return [c.nombre, c.celular, c.codigo, c.sellos, c.ciclos, c.visitas, c.cupones_n, c.ultima_visita, c.cumple, c.creado_en, c.origen]; }));
+      var blob = new Blob(['﻿' + rows.map(function (r) { return r.map(function (v) { v = String(v === undefined || v === null ? '' : v); return /[",;\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';'); }).join('\n')], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'clientes-recompensas.csv'; a.click();
+      return true;
+    }
+    if ((t = e.target.closest('[data-reccli]'))) { recCliente(t.getAttribute('data-reccli')); return true; }
+    return false;
+  }
+  function recChange(e) {
+    var t = e.target;
+    if (t.matches('[data-rp]')) {
+      var p = S.recPremios[+t.getAttribute('data-rp')], k = t.getAttribute('data-k'); p[k] = t.value;
+      if (k === 'producto_id') { if (t.value && !p.nombre) { var pr = S.admin.menu.productos.filter(function (x) { return x.id === t.value; })[0]; if (pr) p.nombre = '1 ' + pr.nombre + ' gratis'; } render(); }
+      return true;
+    }
+    return false;
+  }
+  function recCliente(id) {
+    M.call('rec.clienteDetalle', { cliente_id: id }).then(function (d) {
+      var c = d.cliente;
+      var TIPO = { SELLO: '+1 sello', CANJE: 'Premio canjeado', CUMPLE: 'Premio de cumpleaños', ALTA: 'Alta', AJUSTE: 'Ajuste', REVERSO: 'Reverso de cobro' };
+      var m = M.modal({
+        title: c.nombre + ' · ' + c.sellos + '/' + c.meta + ' sellos', wide: true,
+        body: '<div class="row wrap small" style="margin-bottom:8px"><span class="chip">' + esc(c.celular) + '</span><span class="chip">Código ' + esc(c.codigo) + '</span><span class="chip">' + c.visitas + ' visitas</span><span class="chip">' + c.canjes + ' canjes</span><span class="chip">Alta ' + M.fechaHora(c.creado_en) + ' · ' + esc(c.origen) + '</span></div>' +
+          '<div class="grid2"><div><label class="f">Nombre</label><input class="input" data-cn value="' + esc(c.nombre) + '" maxlength="40"><label class="f" style="margin-top:6px">Celular</label><input class="input" data-cc value="' + esc(c.celular) + '">' +
+          '<label class="f" style="margin-top:6px">Cumpleaños (día/mes)</label><input class="input" data-cb value="' + (c.cumple ? esc(c.cumple.slice(3) + '/' + c.cumple.slice(0, 2)) : '') + '" maxlength="5"><label class="f" style="margin-top:6px">Nota interna</label><input class="input" data-cnota value="' + esc(c.nota || '') + '" maxlength="200">' +
+          '<button class="btn prim" style="margin-top:8px" data-csave>Guardar datos</button></div>' +
+          '<div><label class="f">Ajustar sellos (ej.: 3 o -1)</label><div class="row"><input class="input num" data-aj inputmode="numeric" style="width:90px"><input class="input grow" data-ajm placeholder="Motivo (obligatorio)" maxlength="200"><button class="btn" data-ajok>Aplicar</button></div>' +
+          '<div class="row wrap" style="margin-top:10px"><a class="btn small" target="_blank" rel="noopener" href="' + esc('https://wa.me/' + waNum(c.celular) + '?text=' + encodeURIComponent('Tu tarjeta de ' + S.rec.programa.nombre + ': ' + S.base.replace(/\/?$/, '/') + 'tarjeta.html?c=' + c.token)) + '">Enviar tarjeta por WhatsApp</a>' +
+          '<button class="btn small" data-ctok>Nueva tarjeta (pérdida)</button><button class="btn small ' + (c.activo ? 'danger' : '') + '" data-cbaja>' + (c.activo ? 'Dar de baja' : 'Reactivar') + '</button></div></div></div>' +
+          '<h3 style="margin:14px 0 6px">Premios</h3>' + (d.cupones.length ? '<table class="tbl"><tbody>' + d.cupones.map(function (cu) {
+            return '<tr><td>' + esc(cu.nombre) + '</td><td>' + esc({ DISPONIBLE: 'Disponible', CANJEADO: 'Canjeado', ANULADO: 'Anulado', VENCIDO: 'Vencido' }[cu.estado] || cu.estado) + (cu.estado === 'DISPONIBLE' && cu.vence_en && cu.vence_en < new Date().toISOString() ? ' (vencido)' : '') + '</td><td class="small">' + M.fechaHora(cu.creado_en) + (cu.canjeado_en ? ' → ' + M.fechaHora(cu.canjeado_en) : '') + '</td>' +
+              '<td>' + (cu.estado === 'DISPONIBLE' ? '<button class="btn small ghost" data-cuanul="' + esc(cu.cupon_id) + '">Anular</button>' : '') + '</td></tr>';
+          }).join('') + '</tbody></table>' : '<p class="muted small">Sin premios todavía.</p>') +
+          '<h3 style="margin:14px 0 6px">Movimientos</h3><table class="tbl"><tbody>' + d.movimientos.map(function (mv) {
+            return '<tr><td class="small">' + M.fechaHora(mv.fecha) + '</td><td>' + esc(TIPO[mv.tipo] || mv.tipo) + '</td><td class="small muted">' + esc(mv.caja_id || '') + ' ' + esc(mv.usuario_id || '') + '</td><td class="r small">' + (mv.tipo === 'SELLO' || mv.tipo === 'AJUSTE' || mv.tipo === 'REVERSO' ? 'quedó en ' + mv.sellos_despues : '') + '</td></tr>';
+          }).join('') + '</tbody></table>',
+        foot: '<button class="btn grow" data-x>Cerrar</button>'
+      });
+      function act(pl, msg) { pl.cliente_id = id; return M.call('rec.cliente', pl).then(function () { M.toast(msg, 'ok'); m.close(); cargarRec().then(function () { render(); recCliente(id); }); }, err); }
+      m.$('[data-csave]').onclick = function () { act({ nombre: m.$('[data-cn]').value, celular: m.$('[data-cc]').value, cumple: m.$('[data-cb]').value, nota: m.$('[data-cnota]').value }, 'Datos guardados.'); };
+      m.$('[data-ajok]').onclick = function () { act({ ajuste_sellos: parseInt(m.$('[data-aj]').value, 10) || 0, motivo: m.$('[data-ajm]').value }, 'Sellos ajustados.'); };
+      m.$('[data-ctok]').onclick = function () { M.confirmar('Nueva tarjeta', 'El link y el código actuales dejan de funcionar. Los sellos y premios se mantienen.', 'Generar').then(function (ok) { if (ok) act({ nuevo_token: true }, 'Tarjeta nueva generada. Enviásela por WhatsApp.'); }); };
+      m.$('[data-cbaja]').onclick = function () { act({ activo: !c.activo }, c.activo ? 'Cliente dado de baja.' : 'Cliente reactivado.'); };
+      M.$$('[data-cuanul]', m.el).forEach(function (b) {
+        b.onclick = function () { M.pedirMotivo('Anular premio', { ok: 'Anular' }).then(function (r) { if (r) M.call('rec.cuponAnular', { cupon_id: b.getAttribute('data-cuanul'), motivo: r.motivo }).then(function () { M.toast('Premio anulado.', 'ok'); m.close(); cargarRec().then(function () { render(); recCliente(id); }); }, err); }); };
+      });
+    }, err);
+  }
+
+  // ------------------------------------------------------------ reseñas (plan Gold)
+  function cargarRes() { return M.call('res.admin', {}).then(function (r) { S.res = r; }, function () { S.res = { licencia: false }; }); }
+  function resCfgVal(k) { var x = (S.res.config || []).filter(function (c) { return c.clave === k; })[0]; return x ? x.valor : ''; }
+  function resenas() {
+    var R = S.res; if (!R) return '<div class="empty">Cargando…</div>';
+    if (!R.licencia) return '<div class="card pad" style="max-width:640px"><h2>Reseñas <span class="chip rec">Gold y Premium</span></h2><p>Encuesta interna después de cada pedido e invitación a dejar la reseña en Google.</p><p class="muted">Este módulo no está contratado en este local.</p></div>';
+    var st = R.stats, max = Math.max.apply(null, st.distribucion.concat([1]));
+    var f = S.resFiltro || 'todas';
+    var lista = R.resenas.filter(function (r) { return f === 'todas' || (f === 'bajas' && r.estrellas <= 3) || (f === 'sinleer' && !r.leida && r.estrellas <= 3); });
+    var estrellas = function (n) { return '<span class="stars" aria-label="' + n + ' de 5">' + '★★★★★'.slice(0, n) + '<span class="off">' + '★★★★★'.slice(n) + '</span></span>'; };
+    var mesasQr = S.admin.mesas.filter(function (m) { return m.activa === 'SI'; });
+    return '<div class="row wrap" style="margin-bottom:12px"><h2 class="grow">Reseñas <span class="chip rec">' + esc(S.admin.plan.nombre === 'PREMIUM' ? 'Premium' : 'Gold') + '</span></h2>' +
+      (st.sin_leer_bajas ? '<span class="chip vino">' + (st.sin_leer_bajas === 1 ? '1 opinión baja sin revisar' : st.sin_leer_bajas + ' opiniones bajas sin revisar') + '</span>' : '<span class="chip oliva">Todo revisado</span>') + '</div>' +
+      '<div class="kpis">' + kpi('Promedio', st.total ? st.promedio.toFixed(1) + ' ★' : '—', st.total + ' opiniones') + kpi('Últimos 30 días', st.total_30d ? st.promedio_30d.toFixed(1) + ' ★' : '—', st.total_30d + ' opiniones') +
+      kpi('Clics a Google', st.clics_google, 'personas que abrieron la reseña') + '</div>' +
+      '<div class="grid2" style="margin-top:14px;align-items:start"><div class="card pad"><h2>Distribución</h2>' + [5, 4, 3, 2, 1].map(function (n) {
+        var c = st.distribucion[n - 1];
+        return '<div class="row" style="margin:6px 0"><span style="width:44px" class="num">' + n + ' ★</span><div class="grow" style="background:var(--papel-2);border-radius:4px"><div class="bar" style="width:' + Math.round(c / max * 100) + '%;background:' + (n >= 4 ? 'var(--oliva)' : n === 3 ? 'var(--mostaza)' : 'var(--vino)') + '"></div></div><span class="num" style="width:36px;text-align:right">' + c + '</span></div>';
+      }).join('') +
+      (R.por_mozo.length ? '<h3 style="margin:14px 0 6px">Por mozo</h3><table class="tbl"><tbody>' + R.por_mozo.map(function (m) { return '<tr><td>' + esc(m.nombre) + '</td><td class="r num">' + m.promedio.toFixed(1) + ' ★</td><td class="r small muted">' + m.total + ' opiniones</td></tr>'; }).join('') + '</tbody></table>' : '') + '</div>' +
+      '<div class="card pad"><h2>Configuración</h2>' +
+      '<label class="f">Link de Google para escribir la reseña</label><input class="input" data-resc="res_google_url" value="' + esc(resCfgVal('res_google_url')) + '" placeholder="https://search.google.com/local/writereview?placeid=…">' +
+      '<p class="small muted" style="margin:4px 0 8px">Usá el link que abre directo el formulario de reseña: <strong>https://search.google.com/local/writereview?placeid=</strong> + el Place ID del local (o el link "Pedir reseñas" del Perfil de Empresa de Google). Probalo desde un celular antes de imprimir los QR.</p>' +
+      '<p class="small muted" style="margin:4px 0 0">En Google Business Profile: Inicio → <em>Pedir reseñas</em> → copiar el link. Se muestra a todos los clientes, sin condicionarlo a la nota (así lo exige Google).</p>' +
+      '<label class="f" style="margin-top:8px">Pregunta de la encuesta</label><input class="input" data-resc="res_pregunta" value="' + esc(resCfgVal('res_pregunta')) + '" maxlength="80">' +
+      (R.config.some(function (c) { return c.clave === 'res_sello_encuesta'; }) ? '<label class="f" style="margin-top:8px">Recompensas (Premium)</label><select class="input" data-resc="res_sello_encuesta"><option value="NO"' + (resCfgVal('res_sello_encuesta') !== 'SI' ? ' selected' : '') + '>La encuesta no suma sellos</option><option value="SI"' + (resCfgVal('res_sello_encuesta') === 'SI' ? ' selected' : '') + '>Responder la encuesta suma 1 sello extra (máx. 1 por día)</option></select><p class="small muted" style="margin:4px 0 0">Nunca se premia la reseña en Google.</p>' : '') +
+      '<button class="btn prim" style="margin-top:10px" data-ressave>Guardar</button>' +
+      '<hr style="border:0;border-top:1px solid var(--linea);margin:14px 0"><h3>QR "Contanos cómo estuvo"</h3><p class="small muted">Para clientes que pidieron al mozo: un QR por mesa abre la encuesta de esa mesa. Los que piden por QR ya la ven al recibir su pedido.</p>' +
+      '<button class="btn" data-resqr>Imprimir QR de las ' + mesasQr.length + ' mesas</button></div></div>' +
+      '<div class="section-h"><h2>Opiniones</h2><span class="grow"></span><div class="tabs">' + [['todas', 'Todas'], ['bajas', '3 ★ o menos'], ['sinleer', 'Sin revisar']].map(function (x) { return '<button class="tab' + (f === x[0] ? ' on' : '') + '" data-resf="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>' +
+      (lista.length ? '<div class="grid2">' + lista.slice(0, 120).map(function (r) {
+        return '<div class="card pad' + (r.estrellas <= 3 && !r.leida ? ' res-baja' : '') + '"><div class="row">' + estrellas(r.estrellas) + '<span class="small muted grow">' + M.fechaHora(r.fecha) + '</span>' + (r.google ? '<span class="chip azul">Abrió Google</span>' : '') + '</div>' +
+          (r.comentario ? '<p style="margin:8px 0">' + esc(r.comentario) + '</p>' : '<p class="small muted" style="margin:8px 0">Sin comentario.</p>') +
+          '<div class="small muted">' + [r.mesa, r.mozo ? 'atendió ' + r.mozo : '', r.cliente ? '★ ' + r.cliente : ''].filter(Boolean).map(esc).join(' · ') + '</div>' +
+          (r.nota ? '<div class="small" style="margin-top:6px"><strong>Nota interna:</strong> ' + esc(r.nota) + '</div>' : '') +
+          (r.estrellas <= 3 ? '<div class="row" style="margin-top:8px"><button class="btn small" data-resnota="' + esc(r.resena_id) + '">Agregar nota</button>' + (r.leida ? '<span class="chip oliva">Revisada</span>' : '<button class="btn small prim" data-resleida="' + esc(r.resena_id) + '">Marcar revisada</button>') + '</div>' : '') + '</div>';
+      }).join('') + '</div>' : '<div class="empty">' + (R.resenas.length ? 'Nada en este filtro.' : 'Todavía no hay opiniones. Aparecen cuando los clientes responden después de su pedido.') + '</div>');
+  }
+  function resClick(e) {
+    var t;
+    if ((t = e.target.closest('[data-resf]'))) { S.resFiltro = t.getAttribute('data-resf'); render(); return true; }
+    if (e.target.closest('[data-ressave]')) {
+      var c = {}; M.$$('[data-resc]').forEach(function (x) { c[x.getAttribute('data-resc')] = x.value.trim(); });
+      M.call('res.config', { config: c }).then(function () { M.toast('Guardado.', 'ok'); cargarRes().then(render); }, err); return true;
+    }
+    if ((t = e.target.closest('[data-resleida]'))) { M.call('res.marcar', { resena_id: t.getAttribute('data-resleida'), leida: true }).then(function () { cargarRes().then(render); }, err); return true; }
+    if ((t = e.target.closest('[data-resnota]'))) {
+      var id = t.getAttribute('data-resnota');
+      M.pedirMotivo('Nota interna', { ok: 'Guardar', texto: 'Qué se hizo con esta opinión (ej.: hablamos con cocina, llamamos al cliente).' }).then(function (r) { if (r) M.call('res.marcar', { resena_id: id, nota: r.motivo, leida: true }).then(function () { cargarRes().then(render); }, err); });
+      return true;
+    }
+    if (e.target.closest('[data-resqr]')) {
+      var base = S.base.replace(/\/?$/, '/');
+      printQr(S.admin.mesas.filter(function (m) { return m.activa === 'SI'; }).map(function (m) { return qrCard(m.nombre, null, 'Contanos cómo estuvo · 1 minuto', base + 'resena.html?t=' + encodeURIComponent(m.qr_token)); }));
+      return true;
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------ licencia (solo usuario de plataforma Ser o Límites)
+  function licencia() {
+    var L = S.lic; if (!L) return '<div class="empty">Cargando…</div>';
+    var ORI = { panel: 'definido desde este panel', despliegue: 'definido en el despliegue', por_defecto: 'sin plan configurado' };
+    var INFO = { BASICO: 'Pedidos QR, mozos, cocina, cajas, administración, reservas y cuentas por persona.', GOLD: 'Básico + fotos de los platos en la carta + reseñas (encuesta y Google).', PREMIUM: 'Gold + carta en 3D con realidad aumentada + recompensas (tarjeta de sellos, premios y cumpleaños).' };
+    return '<div class="banner info" style="border-radius:10px;margin-bottom:12px">Panel de Ser o Límites. El encargado del local no ve esta pestaña. El cambio se aplica al instante en todas las pantallas del local.</div>' +
+      '<div class="row wrap" style="margin-bottom:10px"><h2 class="grow">' + esc(L.negocio) + ' · plan actual: ' + esc(PLAN_TXT[L.plan] || L.plan) + '</h2><span class="chip">' + esc(ORI[L.origen] || L.origen) + '</span></div>' +
+      '<div class="grid3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">' + L.planes.map(function (x) {
+        var on = L.plan === x.plan;
+        return '<div class="card pad" style="' + (on ? 'border:2px solid var(--oliva)' : '') + '"><h2>' + esc(PLAN_TXT[x.plan]) + '</h2><p class="small muted">' + esc(INFO[x.plan]) + '</p>' +
+          (on ? '<span class="chip oliva">Activo</span>' : '<button class="btn prim block" data-lic="' + x.plan + '">Activar ' + esc(PLAN_TXT[x.plan]) + '</button>') + '</div>';
+      }).join('') + '</div>' +
+      '<div class="grid2" style="margin-top:12px"><div><label class="f" for="licnota">Nota del cambio (ej.: pagó la implementación, mes vencido)</label><input class="input" id="licnota" maxlength="200"></div>' +
+      '<div><label class="f" for="lic3d">Platos en 3D incluidos (Premium)</label><input class="input num" id="lic3d" inputmode="numeric" value="' + esc(L.platos_3d) + '"><p class="small muted" style="margin:4px 0 0">Por defecto ' + L.platos_3d_incluidos + '. Se guarda al activar un plan.</p></div></div>' +
+      (L.origen === 'panel' ? '<button class="btn" style="margin-top:8px" data-lic="">Volver al plan del despliegue (' + esc(PLAN_TXT[L.plan_despliegue] || L.plan_despliegue) + ')</button>' : '') +
+      ((L.upgrades || []).length ? '<div class="section-h"><h2>Upgrades (se contratan aparte, sobre cualquier plan)</h2></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">' + L.upgrades.map(function (u) {
+          var nom = UPG_TXT[u.modulo] || u.modulo;
+          return '<div class="card pad" data-upg-card="' + esc(u.modulo) + '"' + (u.activo ? ' style="border:2px solid var(--oliva)"' : '') + '><h2>' + esc(nom) + '</h2><p class="small muted">' + esc(UPG_INFO[u.modulo] || u.info) + '</p>' +
+            (u.activo ? '<span class="chip oliva">Activo</span> ' + (u.origen === 'panel' ? '<button class="btn small" data-upg="' + esc(u.modulo) + '" data-upg-on="NO">Desactivar</button>' : '<span class="small muted">definido en el despliegue</span>')
+              : '<button class="btn prim block" data-upg="' + esc(u.modulo) + '" data-upg-on="SI">Activar ' + esc(nom) + '</button>') + '</div>';
+        }).join('') + '</div>' : '') +
+      '<div class="card pad" style="margin-top:16px;border:1px solid var(--vino)"><h2 style="margin-top:0">Empezar de cero</h2>' +
+      '<p class="small" style="margin:4px 0 10px">Para después de la capacitación: borra los pedidos, cuentas, cobros, cierres de caja, reseñas y clientes del programa de recompensas. ' +
+      'Se conservan la carta, las mesas y sus QR, los usuarios, la configuración, el plan y los premios. Con Mesa Viru: se conservan insumos, costos y recetas, y el stock vuelve a cero (cargar una compra o un conteo inicial). Antes de borrar se guarda una copia de respaldo. Las cajas tienen que estar cerradas.</p>' +
+      '<button class="btn danger" data-reiniciar>Reiniciar datos de prueba…</button></div>' +
+      '<div class="section-h"><h2>Historial de cambios</h2></div>' +
+      (L.historial.length ? '<div class="card tbl-wrap"><table class="tbl"><tbody>' + L.historial.map(function (h) { var d = {}; try { d = JSON.parse(h.detalle); } catch (x) { } return '<tr><td class="small">' + M.fechaHora(h.fecha) + '</td><td>' + esc(h.usuario_id) + '</td><td>' + esc((d.antes || '') + ' → ' + (d.despues || '')) + '</td><td class="small">' + esc(d.nota || '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Sin cambios todavía.</div>');
+  }
+  function reiniciarDatos() {
+    var m = M.modal({
+      title: 'Reiniciar datos de prueba', noFocus: true,
+      body: '<p style="margin-top:0">Se borran <strong>todos</strong> los pedidos, cuentas, cobros, cierres de caja, reseñas y clientes del programa de recompensas. No se puede deshacer desde el panel (queda una copia de respaldo en la base).</p>' +
+        '<label class="f">Nota (opcional)</label><input class="input" data-nota maxlength="200" placeholder="Ej.: fin de la capacitación">' +
+        '<label class="f" style="margin-top:8px">Escribí REINICIAR para confirmar</label><input class="input" data-conf autocomplete="off" autocapitalize="characters">' +
+        '<p class="small" data-err style="color:var(--vino);min-height:1em"></p>',
+      foot: '<button class="btn grow" data-x>Cancelar</button><button class="btn danger grow" data-ok>Borrar y empezar de cero</button>'
+    });
+    m.$('[data-ok]').onclick = function () {
+      var b = this, conf = m.$('[data-conf]').value.trim().toUpperCase();
+      if (conf !== 'REINICIAR') { m.$('[data-err]').textContent = 'Escribí REINICIAR para confirmar.'; return; }
+      b.disabled = true; m.$('[data-err]').textContent = 'Reiniciando…';
+      M.call('plataforma.reiniciar', { confirmar: conf, nota: m.$('[data-nota]').value }).then(function (r) {
+        m.close();
+        var B = r.borrados || {};
+        M.toast('Listo: el local empieza de cero (' + (B.Pedidos || 0) + ' pedidos y ' + (B.Cobros || 0) + ' cobros de prueba borrados).', 'ok', 8000);
+        Promise.all([reload(), cargarRec(), cargarRes()]).then(render);
+      }, function (e) { b.disabled = false; m.$('[data-err]').textContent = e.message; });
+    };
+  }
+  var UPG_TXT = { EKUATIAI: "e-Kuatia'i", STOCK: 'Mesa Viru', ATENCION: 'Atención Integrada', ARMADOR: 'Armá tu pedido' };
+  var UPG_INFO = { EKUATIAI: "Factura en e-Kuatia'i (DNIT) desde la caja: la extensión Migrador completa la factura y la persona la firma con su PIN en el portal. Solo para contribuyentes con un establecimiento y un punto de expedición.", STOCK: 'Mesa Viru · stock y costos: insumos, compras con costo promedio, recetas de cada plato, descuento automático con cada venta, conteos, mermas, lista de qué comprar y margen por plato. Aparece en Administración → 💰 Mesa Viru.', ATENCION: 'Atención Integrada · WhatsApp con Whaticket: avisos automáticos al cliente de para llevar (pedido recibido y pedido listo) desde el número del local. Necesita la cuenta de Whaticket del local y su token en Secret Manager (WHATICKET_TOKEN). Aparece en Administración → 💬 WhatsApp.', ARMADOR: 'Armá tu pedido: en la carta del QR, el cliente arma su pizza o hamburguesa con una animación (elige tamaño o pan, agrega ingredientes, pide doble o saca lo que no quiere) y el precio se actualiza solo. Se configura en Catálogo (producto → Armá tu pedido) y en Grupos de opciones.' };
+  function licClick(e) {
+    if (e.target.closest('[data-reiniciar]')) { reiniciarDatos(); return true; }
+    var u = e.target.closest('[data-upg]');
+    if (u) {
+      var mod = u.getAttribute('data-upg'), on = u.getAttribute('data-upg-on') === 'SI', nom = UPG_TXT[mod] || mod, notaU = (M.$('#licnota') || {}).value || '';
+      M.confirmar(on ? 'Activar ' + nom : 'Desactivar ' + nom, on ? 'El local suma ' + nom + ' (se cobra aparte del plan). Las pantallas se actualizan solas.' : 'El local deja de ver ' + nom + '.', 'Confirmar').then(function (ok) {
+        if (!ok) return;
+        M.call('plataforma.upgrade', { modulo: mod, activo: on, nota: notaU }).then(function (r) { S.lic = r; M.toast(nom + (on ? ' activado' : ' desactivado'), 'ok'); reload().then(render); }, err);
+      });
+      return true;
+    }
+    var t = e.target.closest('[data-lic]'); if (!t) return false;
+    var plan = t.getAttribute('data-lic'), nota = (M.$('#licnota') || {}).value || '', p3 = ((M.$('#lic3d') || {}).value || '').trim();
+    M.confirmar('Cambiar plan', plan ? 'El local pasa a ' + PLAN_TXT[plan] + '. Las pantallas se actualizan solas.' : 'El local vuelve al plan del despliegue.', 'Confirmar').then(function (ok) {
+      if (!ok) return;
+      M.call('plataforma.plan', { plan: plan, nota: nota, platos_3d: p3 === '' ? '' : parseInt(p3, 10) }).then(function (r) { S.lic = r; M.toast('Plan actualizado: ' + (PLAN_TXT[r.plan] || r.plan), 'ok'); Promise.all([reload(), cargarRec(), cargarRes()]).then(render); }, err);
+    });
+    return true;
+  }
+
+  // ------------------------------------------------------------ eventos
+  function onClick(e) {
+    var t;
+    if (S.vista === 'recompensas' && recClick(e)) return;
+    if (S.vista === 'resenas' && resClick(e)) return;
+    if (S.vista === 'licencia' && licClick(e)) return;
+    if ((t = e.target.closest('[data-tab]'))) { S.vista = t.getAttribute('data-tab'); if (S.vista === 'auditoria') S.audit = null; if (S.vista === 'recompensas') { S.recPremios = null; return cargarRec().then(render); } if (S.vista === 'resenas') return cargarRes().then(render); if (S.vista === 'licencia') { S.lic = null; return M.call('plataforma.estado', {}).then(function (r) { S.lic = r; render(); }, err); } render(); return; }
+    if (e.target.closest('[data-rep]')) { S.desde = M.$('#desde').value; S.hasta = M.$('#hasta').value; M.call('admin.report', { desde: S.desde, hasta: S.hasta }).then(function (r) { S.rep = r; render(); }, err); return; }
+    if (e.target.closest('[data-csv]')) { csv(); return; }
+    if ((t = e.target.closest('[data-edit]'))) { editProd(t.getAttribute('data-edit')); return; }
+    if (e.target.closest('[data-newprod]')) { editProd(null); return; }
+    if (e.target.closest('[data-cats]')) { editCats(); return; }
+    if (e.target.closest('[data-cartaia]')) { CartaIAUI.abrir(M, { categorias: S.admin.menu.categorias.map(function (c) { return c.nombre; }), listo: function () { reload(); } }); return; }
+    if ((t = e.target.closest('[data-disp]'))) {
+      var p = S.admin.menu.productos.filter(function (x) { return x.id === t.getAttribute('data-disp'); })[0];
+      M.call('product.availability', { producto_id: p.id, disponible: !p.disponible }).then(function () { reload(); }, err); return;
+    }
+    if ((t = e.target.closest('[data-editgrp]'))) { editGrupo(t.getAttribute('data-editgrp')); return; }
+    if (e.target.closest('[data-savebase]')) { S.base = M.$('#base').value.trim(); try { localStorage.setItem('mesapyae.baseUrl', S.base); } catch (x) { } render(); return; }
+    if (e.target.closest('[data-newmesa]')) { editMesa(null); return; }
+    if ((t = e.target.closest('[data-editmesa]'))) { editMesa(t.getAttribute('data-editmesa')); return; }
+    if ((t = e.target.closest('[data-qr]'))) { verQr(t.getAttribute('data-qr')); return; }
+    if (e.target.closest('[data-printqr]')) {
+      var tk = S.admin.puntos.filter(function (x) { return x.punto_id === 'B_TAKEAWAY' && x.activo !== 'NO'; })[0];
+      printQr(S.admin.mesas.filter(function (m) { return m.activa === 'SI'; }).map(function (m) { return qrCard(m.nombre, m.qr_token); }).concat(tk ? [qrCard('Para llevar', tk.qr_token, 'Pedí desde tu celular y retirá en el mostrador')] : []));
+      return;
+    }
+    if ((t = e.target.closest('[data-rot]')) || (t = e.target.closest('[data-rotp]'))) {
+      var mesaId = t.getAttribute('data-rot'), punto = t.getAttribute('data-rotp');
+      M.confirmar('Nuevo código QR', 'El QR impreso actual deja de funcionar y hay que imprimir el nuevo. ¿Continuar?', 'Generar nuevo', true).then(function (ok) {
+        if (ok) M.call('admin.rotateQr', mesaId ? { mesa_id: mesaId } : { punto_id: punto }).then(function () { M.toast('Código regenerado. Imprimí el nuevo QR.', 'ok'); reload(); }, err);
+      });
+      return;
+    }
+    if (e.target.closest('[data-verinact]')) { S.verInactivos = !S.verInactivos; render(); return; }
+    if ((t = e.target.closest('[data-edituser]'))) { editUser(t.getAttribute('data-edituser')); return; }
+    if ((t = e.target.closest('[data-kick]'))) {
+      var uid = t.getAttribute('data-kick');
+      M.confirmar('Cerrar sesiones', 'Todos los dispositivos de ' + uid + ' deberán volver a ingresar.', 'Cerrar sesiones').then(function (ok) {
+        if (ok) M.call('auth.logoutAll', { usuario_id: uid }).then(function () { M.toast('Sesiones cerradas.', 'ok'); if (uid === M.session.usuario.usuario_id) M.logout(); }, err);
+      });
+      return;
+    }
+    if ((t = e.target.closest('[data-savecfg]'))) {
+      var k = t.getAttribute('data-savecfg');
+      M.call('admin.config', { clave: k, valor: M.$('[data-cfg="' + k + '"]').value }).then(function () { M.toast('Guardado.', 'ok'); reload(); }, err); return;
+    }
+    if (e.target.closest('[data-reaudit]')) { S.audit = null; render(); return; }
+  }
+  function onChange(e) { if (S.vista === 'recompensas' && recChange(e)) return; if (e.target.id === 'catf') { S.catFiltro = e.target.value; render(); } }
+  function onInput(e) {
+    if (e.target.id === 'recq') { S.recQ = e.target.value; var p2 = e.target.selectionStart; render(); var q2 = M.$('#recq'); q2.focus(); q2.setSelectionRange(p2, p2); return; }
+    if (e.target.matches && e.target.matches('[data-rp]')) { S.recPremios[+e.target.getAttribute('data-rp')][e.target.getAttribute('data-k')] = e.target.value; return; }
+    if (e.target.id === 'q') { S.q = e.target.value; var pos = e.target.selectionStart; render(); var q = M.$('#q'); q.focus(); q.setSelectionRange(pos, pos); }
+  }
+  function err(e) { M.toast(e.message || 'Error', 'error'); }
+})();
+</script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});</script>
+</body>
+</html>

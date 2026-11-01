@@ -1,0 +1,20 @@
+{
+ "ok": true,
+ "pasos": [
+  "Cliente QR Mesa 3 (celular): pedido A-001 con variantes y nota, total Gs. 60.000, queda PENDIENTE",
+  "Mozo (tablet): acepta A-001 y carga A-002 en Mesa 5 (2× Pollo al curry lactal + Capuchino Andrade con syrup) = Gs. 105.000",
+  "Cocina (escritorio): ve variantes y notas sin precios; A-001 Empezar→Listo, A-002 directo a Listo; marca Brownie con helado agotado",
+  "Cliente ve su pedido en estado Listo (actualización automática)",
+  "Mozo entrega A-001 y A-002; Mesa 3 solicita la cuenta",
+  "Caja 01: turno abierto con Gs. 100.000; Mesa 3 cobrada en efectivo (vuelto Gs. 40.000); Mesa 5 dividida efectivo 60.000 + TD 45.000",
+  "Cajera de Caja 01 que abre la URL de Caja 02 queda en Caja 01 (permiso verificado también en servidor)",
+  "Caja 02 (tablet): venta para llevar T-001 a nombre de Lucía, cobrada por transferencia",
+  "Cliente en la casita pide T-002 por QR (nombre obligatorio); Caja 02 lo acepta y aparece en Cocina",
+  "Fallo de conexión: el mozo ve el aviso, el pedido queda en pantalla y al reintentar se registra una sola vez",
+  "Caja 01 cerrada: esperado Gs. 220.000, contado Gs. 219.000, diferencia -1.000 con observación obligatoria; Caja 02 sigue abierta",
+  "Admin: resumen con ventas por caja y consolidado; QR por mesa generado; catálogo con estado de validación",
+  "Reporte: Caja 01 Gs. 165.000 (efectivo 120.000 + TD 45.000), Caja 02 Gs. 30.000 (transferencia), consolidado Gs. 195.000, 5 pedidos (el reintento offline no duplicó)",
+  "Sin errores de JavaScript en ninguna página"
+ ],
+ "fecha": "2026-10-25T02:20:46.349Z"
+}

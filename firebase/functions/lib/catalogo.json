@@ -1,0 +1,9 @@
+{
+  "version": "base-vacio",
+  "fuente": "Base de Mesa Pya'e: sin carta. Cada local trae la suya en locales/<local>/catalogo.json.",
+  "verificacion": "",
+  "categorias": [],
+  "grupos": [],
+  "opciones": [],
+  "productos": []
+}

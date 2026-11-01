@@ -1,0 +1,188 @@
+<title>Demo Mesa Pya'e</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* Layout: una columna de lectura; la comparación de planes es la pieza central, con un botón para probar cada uno. */
+  :root {
+    --bg: #F6F2E9; --card: #FFFDF8; --fg: #14241D; --muted: #5E6B63; --line: #E2DACB;
+    --verde: #0F3D2B; --verde-2: #165A3E; --oro: #C9982F; --oro-claro: #F3E6C4; --naranja: #D9612A;
+    --f-tit: 'Fraunces', Georgia, 'Times New Roman', serif; --f-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0F1915; --card: #16241E; --fg: #EEF1EA; --muted: #A9B5AD; --line: #27392F; --verde: #7FC4A3; --verde-2: #5FB08B; --oro: #E3B653; --oro-claro: #3A3220; --naranja: #F08A55; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #0F1915; --card: #16241E; --fg: #EEF1EA; --muted: #A9B5AD; --line: #27392F; --verde: #7FC4A3; --verde-2: #5FB08B; --oro: #E3B653; --oro-claro: #3A3220; --naranja: #F08A55; color-scheme: dark; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 16px; line-height: 1.55; }
+  .wrap { max-width: 960px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; display: grid; gap: 30px; }
+  header { display: grid; gap: 10px; }
+  .logo { width: min(320px, 80%); height: auto; background: #FFFDF8; border-radius: 14px; padding: 10px 14px; }
+  h1 { font-family: var(--f-tit); font-weight: 600; font-size: clamp(1.9rem, 5vw, 2.8rem); line-height: 1.1; margin: 6px 0 0; color: var(--verde); text-wrap: balance; }
+  h1 em { font-style: normal; color: var(--naranja); }
+  h2 { font-family: var(--f-tit); font-weight: 600; font-size: 1.35rem; margin: 0 0 10px; color: var(--verde); }
+  p { margin: 0; max-width: 66ch; }
+  .lead { font-size: 1.08rem; color: var(--fg); }
+  .note { background: var(--oro-claro); border-radius: 12px; padding: 12px 14px; font-size: .93rem; }
+  .planes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 14px; align-items: stretch; }
+  .plan { display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; min-width: 0; }
+  .plan.top { border: 2px solid var(--oro); }
+  .plan .tag { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .plan h3 { font-family: var(--f-tit); font-weight: 600; font-size: 1.6rem; margin: 0; color: var(--verde); }
+  .plan ul { margin: 0; padding-left: 1.1em; display: grid; gap: 5px; font-size: .94rem; }
+  .plan li.mas { list-style: none; margin-left: -1.1em; font-weight: 600; color: var(--muted); font-size: .85rem; }
+  .plan li b { color: var(--fg); }
+  .probar { display: block; text-align: center; padding: 11px 14px; border-radius: 10px; background: var(--verde); color: #FFFDF8; text-decoration: none; font-weight: 600; border: 0; font: inherit; cursor: pointer; }
+  .plan.top .probar { background: var(--oro); color: #14241D; }
+  .probar:focus-visible, .mod:focus-visible { outline: 3px solid var(--naranja); outline-offset: 2px; }
+  .mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 10px; }
+  .mod { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); text-decoration: none; min-width: 0; }
+  .mod:hover { border-color: var(--oro); }
+  .mod strong { font-weight: 600; }
+  .mod span { color: var(--muted); font-size: .88rem; }
+  .mod code { font-size: .8rem; color: var(--verde-2); }
+  .tbl { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .93rem; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; }
+  td.c { text-align: center; } td.pin { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; }
+  .si { color: var(--verde-2); font-weight: 700; } .no { color: var(--muted); }
+  ol { margin: 0; padding-left: 1.3em; display: grid; gap: 7px; max-width: 72ch; }
+  section { display: grid; gap: 10px; }
+  footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); padding-top: 14px; }
+  footer a { color: var(--verde-2); }
+  .celu { display: flex; gap: 16px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+  .celu-qr { width: 120px; flex: none; background: #fff; border-radius: 10px; padding: 6px; }
+  .celu-qr:empty { display: none; }
+  .celu > div:last-child { min-width: 0; }
+  @media (max-width: 560px) { .celu { display: none; } }
+  .video { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  .video video { width: 100%; aspect-ratio: 9 / 16; height: auto; border-radius: 12px; background: #0F3D2B; display: block; }
+  .video ul { margin: 6px 0 0; padding-left: 1.1em; display: grid; gap: 4px; font-size: .94rem; }
+  @media (max-width: 640px) { .video { grid-template-columns: 1fr; } .video video { max-width: 320px; margin: 0 auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <img class="logo" src="app/assets/mesapyae-logo.png" alt="Mesa Pya'e by Ser o Límites">
+    <h1>Traemos velocidad para que <em>atiendas con calma.</em></h1>
+    <p class="lead">Probá el sistema completo con la carta de un café de ejemplo. Elegí un plan, entrá como encargado, mozo, cocina, caja o cliente, y mirá qué cambia de un plan a otro.</p>
+  </header>
+
+  <section class="video" aria-labelledby="video-t">
+    <video controls playsinline preload="metadata" poster="video/presentacion-mesa-pyae.jpg">
+      <source src="video/presentacion-mesa-pyae.mp4" type="video/mp4">
+      Tu navegador no puede mostrar el video.
+    </video>
+    <div>
+      <h2 id="video-t">Mirá Mesa Pya'e en un minuto</h2>
+      <p>Antes de probarla, mirá cómo funciona en un salón real: del pedido del cliente a la cocina y la caja, sin corridas.</p>
+      <ul>
+        <li>El cliente pide desde su mesa, con foto de cada plato</li>
+        <li>Cocina y caja reciben todo al instante</li>
+        <li>El cliente ve cuándo su pedido está listo</li>
+        <li>Clientes que vuelven con la tarjeta de sellos</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="celu"><div class="celu-qr" id="qr" aria-hidden="true"></div><div><strong>Vivila como cliente desde tu celular.</strong> Escaneá este código con la cámara: se abre esta misma demo en tu teléfono, con la carta, el menú 3D sobre tu mesa y la tarjeta de sellos.</div></div>
+
+  <p class="note">Demo de prueba: funciona en tu navegador y lo que cargues queda guardado solo en tu dispositivo. Los clientes, opiniones, precios y modelos 3D son ejemplos. El plan se cambia cuando quieras desde la barra amarilla de arriba.</p>
+
+  <section>
+    <h2>Probá cada plan</h2>
+    <div class="planes">
+      <div class="plan">
+        <div class="tag">Para empezar</div><h3>Básico</h3>
+        <ul>
+          <li>Carta QR y pedido desde el celular</li>
+          <li>Panel de mozos, cocina y dos cajas</li>
+          <li>Cuenta por persona, reservas y factura</li>
+          <li>Administración, reportes y auditoría</li>
+        </ul>
+        <button class="probar" data-plan="BASICO" data-ir="app/pedidos.html">Probar Básico</button>
+      </div>
+      <div class="plan">
+        <div class="tag">Experiencia del cliente</div><h3>Gold</h3>
+        <ul>
+          <li class="mas">Todo lo del Básico, más:</li>
+          <li><b>Fotos de los platos</b> en la carta del cliente</li>
+          <li><b>Reseñas:</b> encuesta después del pedido y botón directo a Google</li>
+          <li>Panel de opiniones por mozo y alertas de notas bajas</li>
+        </ul>
+        <button class="probar" data-plan="GOLD" data-ir="app/menu.html">Probar Gold</button>
+      </div>
+      <div class="plan top">
+        <div class="tag">Que el cliente vuelva</div><h3>Premium</h3>
+        <ul>
+          <li class="mas">Todo lo del Gold, más:</li>
+          <li><b>Carta en 3D:</b> el cliente gira el plato y lo ve en su mesa con la cámara (hasta 5 platos)</li>
+          <li><b>Recompensas:</b> tarjeta de sellos que se suma sola al cobrar y premios que se canjean en caja</li>
+          <li>Cumpleaños, base de clientes y quién volvió</li>
+        </ul>
+        <button class="probar" data-plan="PREMIUM" data-ir="app/admin.html">Probar Premium</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Qué incluye cada plan</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Función</th><th class="c">Básico</th><th class="c">Gold</th><th class="c">Premium</th></tr></thead>
+      <tbody>
+        <tr><td>Pedidos por QR, mozos, cocina y cajas</td><td class="c si">✓</td><td class="c si">✓</td><td class="c si">✓</td></tr>
+        <tr><td>Cuenta dividida por persona, reservas, factura</td><td class="c si">✓</td><td class="c si">✓</td><td class="c si">✓</td></tr>
+        <tr><td>Fotos de los platos en la carta</td><td class="c no">—</td><td class="c si">✓</td><td class="c si">✓</td></tr>
+        <tr><td>Encuesta de satisfacción y reseña en Google</td><td class="c no">—</td><td class="c si">✓</td><td class="c si">✓</td></tr>
+        <tr><td>Carta en 3D con realidad aumentada (hasta 5 platos)</td><td class="c no">—</td><td class="c no">—</td><td class="c si">✓</td></tr>
+        <tr><td>Tarjeta de sellos, premios y cumpleaños</td><td class="c no">—</td><td class="c no">—</td><td class="c si">✓</td></tr>
+        <tr><td>Base de clientes y tasa de retorno</td><td class="c no">—</td><td class="c no">—</td><td class="c si">✓</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Entradas de la demo</h2>
+    <div class="mods">
+      <a class="mod" href="app/menu.html"><strong>Carta QR · cliente</strong><span>Mesa 1. En Gold y Premium, la carta muestra las fotos de los platos; en Premium, tocá el botón 3D del Espresso, la Pizza personal o el Panini César.</span></a>
+      <a class="mod" href="app/tarjeta.html"><strong>Tarjeta del cliente</strong><span>Solo en Premium: alta y tarjeta de sellos.</span></a>
+      <a class="mod" href="app/pedidos.html"><strong>Mozos</strong><span>Mesas, comandas y cuentas.</span><code>mozo · 1111</code></a>
+      <a class="mod" href="app/cocina.html"><strong>Cocina</strong><span>Pedidos en preparación y listos.</span><code>cocina · 2222</code></a>
+      <a class="mod" href="app/caja.html?caja=CAJA_A"><strong>Caja 01 · Cafetería</strong><span>Cobros, premios y cierre.</span><code>cajaa · 3333</code></a>
+      <a class="mod" href="app/admin.html"><strong>Administración</strong><span>Reportes, catálogo, reseñas y recompensas.</span><code>admin · 1234</code></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Recorrido de 10 minutos</h2>
+    <ol>
+      <li><strong>Básico:</strong> pedí desde la carta QR de la Mesa 1, aceptalo en Mozos, prepararlo en Cocina y cobralo en Caja 01.</li>
+      <li><strong>Gold:</strong> mirá la carta con las fotos de cada plato.</li>
+      <li>Cuando el pedido esté listo, el cliente califica la visita y ve el botón para reseñar en Google. En Administración → <strong>★ Reseñas</strong> están el promedio, las opiniones bajas y la nota por mozo.</li>
+      <li><strong>Premium:</strong> en la carta buscá "pizza" y tocá <strong>3D</strong>: girala con el dedo; en un celular compatible, "Ver en mi mesa" la pone sobre la mesa. Después sacá una tarjeta en "Tarjeta del cliente", pedí con ese celular y cobrá: el sello se suma solo. En Administración → <strong>★ Recompensas</strong> mirá clientes, premios y cumpleaños.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Usuarios de prueba</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Usuario</th><th>PIN</th><th>Rol</th></tr></thead>
+      <tbody>
+        <tr><td>admin</td><td class="pin">1234</td><td>Encargado: todo, autoriza descuentos y reversos</td></tr>
+        <tr><td>mozo</td><td class="pin">1111</td><td>Mesas, pedidos, vincular tarjeta</td></tr>
+        <tr><td>cocina</td><td class="pin">2222</td><td>Preparación y disponibilidad</td></tr>
+        <tr><td>cajaa / cajab</td><td class="pin">3333 / 4444</td><td>Caja 01 Cafetería / Caja 02 Takeaway</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>Mesa Pya'e by <a href="https://serolimites.com/empresas/sistemas/mesa-pyae">Ser o Límites</a> · Los modelos 3D de la demo son ilustrativos; en cada local se escanean sus platos reales.</footer>
+</div>
+
+<script src="app/assets/qr.js"></script>
+<script>
+  try { if (window.QR && /^https?:/.test(location.href)) document.getElementById('qr').innerHTML = QR.svg(location.href.split('#')[0], { margin: 1 }); } catch (e) { }
+  document.querySelectorAll('[data-plan]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      try { localStorage.setItem('mesapyae.demo.plan', b.getAttribute('data-plan')); } catch (e) { }
+      location.href = b.getAttribute('data-ir');
+    });
+  });
+</script>

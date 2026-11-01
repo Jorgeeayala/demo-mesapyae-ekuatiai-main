@@ -1,0 +1,59 @@
+# Publica la demo pública de Mesa Pya'e (https://mesapyae-demo.web.app, proyecto Firebase mesapyae-demo) con un botón,
+# sin Cloud Shell. Arma el paquete con tools/paquete_demo.sh y lo publica con firebase/desplegar.sh (plan PREMIUM, modo demo).
+# El PIN de sol sale de la bóveda central (mesapyae-central); nunca se escribe acá. La demo usa solo datos ficticios.
+name: publicar-demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      rama:
+        description: "Versión a mostrar en la demo: main (lo último probado) o estable (lo que tienen los clientes)"
+        required: true
+        default: main
+        type: choice
+        options: [main, estable]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publicar-demo
+  cancel-in-progress: false
+
+env:
+  PROYECTO: mesapyae-demo
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    environment: pruebas
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.rama }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_PROVEEDOR }}
+          service_account: ${{ vars.GCP_CUENTA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Armar el paquete de la demo
+        run: sh tools/paquete_demo.sh /tmp/mesa-demo.tgz
+      - name: Publicar en ${{ env.PROYECTO }}
+        run: |
+          mkdir -p /tmp/pub && tar xzf /tmp/mesa-demo.tgz -C /tmp/pub
+          cd /tmp/pub/mesa-demo && sh firebase/desplegar.sh "$PROYECTO" PREMIUM demo </dev/null
+      - name: Verificar que responde
+        run: |
+          for i in $(seq 1 10); do
+            W=$(curl -s -o /dev/null -w '%{http_code}' "https://$PROYECTO.web.app/")
+            R=$(curl -s -X POST -H 'Content-Type: application/json' -d '{"action":"health"}' "https://$PROYECTO.web.app/api")
+            echo "$(date +%H:%M:%S) página=$W api=$(echo "$R" | head -c 120)"
+            [ "$W" = "200" ] && echo "$R" | grep -q '"ok":true' && exit 0
+            sleep 30
+          done
+          echo "::error::La demo no respondió bien en 5 minutos."; exit 1

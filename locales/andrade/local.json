@@ -1,0 +1,25 @@
+{
+  "_nota": "Andrade Casa Café y Arte: primer cliente y local piloto de Mesa Pya'e. También es el local de referencia de las pruebas.",
+  "slug": "andrade",
+  "nombre": "Andrade Casa Café",
+  "nombre_corto": "Andrade",
+  "direccion": "Olegario Víctor Andrade 2690 · Asunción",
+  "plan": "PREMIUM",
+  "colores": { "principal": "#7A5C43", "principal_oscuro": "#5B4331", "secundario": "#A9643C" },
+  "mesas": 20,
+  "puntos": {
+    "salon": { "nombre": "Cafetería principal", "corto": "Salón" },
+    "para_llevar": { "activo": true, "nombre": "Andrade Takeaway (casita)", "corto": "Takeaway", "lugar": "la casita" }
+  },
+  "cajas": { "A": "Caja 01 — Cafetería", "B": "Caja 02 — Takeaway" },
+  "config": { "nombre_negocio": "Andrade Casa Café y Arte" },
+  "sitio": {
+    "api_url": "https://southamerica-east1-andrade-mesapyae-staging.cloudfunctions.net/api",
+    "firebase": {
+      "projectId": "andrade-mesapyae-staging",
+      "apiKey": "AIzaSyCRdBx0JuCWhONOGJXQuYUWaItc0Lbhe0I",
+      "appId": "1:1029743634628:web:3bd8e33a299e36d503c191"
+    }
+  },
+  "dominio": ["pedidos.andradecasacafe.com", "andrade-mesapyae.netlify.app"]
+}

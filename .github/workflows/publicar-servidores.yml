@@ -1,0 +1,81 @@
+# E3 · Publicar el servidor de uno o de todos los locales, sin Cloud Shell.
+# GitHub entra a Google Cloud con la federación de identidad (sin claves) creada por tools/e3_permisos_github.sh.
+# El PIN de sol sale de la bóveda central (mesapyae-central); nunca se escribe acá.
+name: publicar-servidores
+
+on:
+  workflow_dispatch:
+    inputs:
+      local:
+        description: "Local a publicar (ej. andrade, lo-de-rolo) o 'todos'"
+        required: true
+        default: todos
+      rama:
+        description: "Versión a publicar: estable (clientes) o main (pruebas)"
+        required: true
+        default: estable
+        type: choice
+        options: [estable, main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publicar-servidores
+  cancel-in-progress: false
+
+jobs:
+  lista:
+    runs-on: ubuntu-latest
+    outputs:
+      locales: ${{ steps.l.outputs.locales }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.rama }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: l
+        run: echo "locales=$(node tools/locales_servidor.js '${{ inputs.local }}')" >> "$GITHUB_OUTPUT"
+
+  publicar:
+    needs: lista
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.rama == 'estable' && 'clientes' || 'pruebas' }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include: ${{ fromJSON(needs.lista.outputs.locales) }}
+    name: ${{ matrix.local }} → ${{ matrix.proyecto }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.rama }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_PROVEEDOR }}
+          service_account: ${{ vars.GCP_CUENTA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Armar el paquete del local
+        run: sh tools/paquete_local.sh /tmp/mesa-local.tgz "${{ matrix.local }}"
+      - name: Publicar en ${{ matrix.proyecto }}
+        run: |
+          mkdir -p /tmp/pub && tar xzf /tmp/mesa-local.tgz -C /tmp/pub
+          cd /tmp/pub/mesa-local && sh firebase/desplegar.sh "${{ matrix.proyecto }}" </dev/null
+      - name: Verificar que responde
+        run: |
+          # En un proyecto recién creado los permisos tardan unos minutos en aplicarse: se reintenta hasta 8 minutos.
+          for i in $(seq 1 16); do
+            R=$(curl -s -X POST -H 'Content-Type: application/json' -d '{"action":"health"}' "https://southamerica-east1-${{ matrix.proyecto }}.cloudfunctions.net/api")
+            echo "$(date +%H:%M:%S) $(echo "$R" | head -c 200)"
+            echo "$R" | grep -q '"ok":true' && exit 0
+            sleep 30
+          done
+          echo "::error::El servidor no respondió bien en 8 minutos."; exit 1

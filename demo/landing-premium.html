@@ -1,0 +1,102 @@
+<title>Club Andrade Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* Layout: una columna de lectura con la grilla de módulos como tablero de entrada. */
+  :root {
+    --bg: #F3EDE1; --card: #FBF8F2; --fg: #1F1B17; --muted: #6E6257; --line: #DED4C3; --accent: #7A5C43; --ok: #4F6B3F; --warn-bg: #F5E8C8; --warn-fg: #6d5212;
+    --f-tit: 'Oswald', 'Arial Narrow', sans-serif; --f-body: 'Inter', system-ui, sans-serif; --f-serif: 'Source Serif 4', Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1C1814; --card: #26211C; --fg: #F1EADF; --muted: #B5A897; --line: #3B332B; --accent: #D2A985; --ok: #9DBB86; --warn-bg: #3A3020; --warn-fg: #EBD29A; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #1C1814; --card: #26211C; --fg: #F1EADF; --muted: #B5A897; --line: #3B332B; --accent: #D2A985; --ok: #9DBB86; --warn-bg: #3A3020; --warn-fg: #EBD29A; color-scheme: dark; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
+  .wrap { max-width: 880px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 48px; display: grid; gap: 22px; }
+  header { display: grid; gap: 6px; }
+  .eyebrow { font-family: var(--f-tit); text-transform: uppercase; letter-spacing: .16em; font-size: .78rem; color: var(--accent); }
+  h1 { font-family: var(--f-tit); font-weight: 600; font-size: clamp(1.9rem, 5vw, 2.6rem); text-transform: uppercase; letter-spacing: .02em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--f-tit); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; font-size: 1.05rem; margin: 0 0 10px; }
+  p { margin: 0; max-width: 65ch; }
+  .lead { font-family: var(--f-serif); font-size: 1.12rem; color: var(--fg); }
+  .note { background: var(--warn-bg); color: var(--warn-fg); border-radius: 10px; padding: 12px 14px; font-size: .92rem; }
+  .mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px; }
+  .mod { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); text-decoration: none; min-width: 0; }
+  .mod:hover, .mod:focus-visible { border-color: var(--accent); outline: none; }
+  .mod strong { font-family: var(--f-tit); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; font-size: 1.05rem; }
+  .mod span { color: var(--muted); font-size: .9rem; }
+  .mod code { font-size: .82rem; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: .93rem; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+  td.pin { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; }
+  .tbl { overflow-x: auto; }
+  ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; max-width: 70ch; }
+  section { display: grid; gap: 8px; }
+  footer { color: var(--muted); font-size: .85rem; }
+  .pill { display: inline-block; font-family: var(--f-tit); text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; padding: 3px 10px; border-radius: 999px; background: var(--warn-bg); color: var(--warn-fg); vertical-align: middle; }
+  .mod.main { border-color: var(--accent); }
+  .why { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px; }
+  .why div { padding: 12px 14px; border-left: 3px solid var(--ok); background: var(--card); border-radius: 0 10px 10px 0; min-width: 0; }
+  .why strong { display: block; margin-bottom: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Mesa Pya'e · Módulo Premium · Ser o Límites</div>
+    <h1>Recompensas <span class="pill">Premium</span></h1>
+    <p class="lead">Tarjeta de sellos digital conectada a la caja. El cliente suma un sello cada vez que paga, gana premios de la carta y vuelve. El local ve quién vuelve, cuánto compra y cuándo cumple años.</p>
+  </header>
+
+  <p class="note">Demo de uso interno con la carta real de Andrade y <strong>32 clientes ficticios</strong> con historial. Funciona completa en el navegador: lo que cargues queda guardado solo en este navegador. Las ventas del club se van llenando a medida que cobrás en la demo.</p>
+
+  <section>
+    <h2>Qué tiene que no tiene una tarjeta de sellos común</h2>
+    <div class="why">
+      <div><strong>El sello se suma solo al cobrar</strong>La caja no escanea nada aparte: si el cliente dio su celular en la carta o el mozo vinculó su tarjeta, el sello entra con el cobro.</div>
+      <div><strong>Premios de la carta</strong>"1 Espresso gratis" a los 6 sellos y "1 Panini César gratis" a los 10. Se canjean en el mismo cobro, sin pedir autorización.</div>
+      <div><strong>Sin app para descargar</strong>El cliente saca su tarjeta con nombre y celular, y la guarda en la pantalla de inicio del teléfono.</div>
+      <div><strong>Cumpleaños</strong>En la semana del cumpleaños el cliente tiene un premio de regalo, y el encargado ve la lista del mes con acceso a WhatsApp.</div>
+      <div><strong>Control y auditoría</strong>Compra mínima por sello, un sello por día, vencimiento de premios, ajustes con motivo y reverso del cobro que deshace el sello.</div>
+      <div><strong>Base de clientes propia</strong>Quién volvió, visitas, ventas del club en 30 días, costo de los premios y exportación a planilla.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Módulos</h2>
+    <div class="mods">
+      <a class="mod main" href="app/tarjeta.html"><strong>Tarjeta del cliente</strong><span>Alta y tarjeta digital, como la ve el cliente en su celular.</span></a>
+      <a class="mod" href="app/menu.html"><strong>Carta QR</strong><span>Pedido desde la mesa con el celular para sumar el sello.</span></a>
+      <a class="mod" href="app/caja.html?caja=CAJA_B"><strong>Caja 02 · Takeaway</strong><span>Cobra y suma el sello; canje de premios.</span><code>cajab · 4444</code></a>
+      <a class="mod" href="app/caja.html?caja=CAJA_A"><strong>Caja 01 · Cafetería</strong><span>Cobros de mesas con tarjeta vinculada.</span><code>cajaa · 3333</code></a>
+      <a class="mod" href="app/pedidos.html"><strong>Pedidos · mozos</strong><span>Vincula la tarjeta del cliente a la mesa.</span><code>mozo · 1111</code></a>
+      <a class="mod main" href="app/admin.html"><strong>Administración</strong><span>Pestaña ★ Recompensas: premios, reglas, clientes y métricas.</span><code>admin · 1234</code></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Recorrido de la demo (10 minutos)</h2>
+    <ol>
+      <li>Abrí <strong>Administración</strong> (admin · 1234) → <strong>★ Recompensas</strong>: mostrá los 32 clientes, cuántos volvieron, los premios y los cumpleaños del mes.</li>
+      <li>Abrí la <strong>Tarjeta del cliente</strong> en el celular (o con la ventana angosta): sacá una tarjeta con tu nombre y celular. Aparece en 0 de 10 con el código y el QR.</li>
+      <li>Desde la barra de la demo tocá <strong>QR Takeaway</strong>: arriba aparece "Club Andrade". Poné el mismo celular, pedí dos espressos, poné tu nombre y confirmá.</li>
+      <li>Entrá a <strong>Caja 02</strong> (cajab · 4444), abrí el turno y tocá Cobrar: la tarjeta aparece sola. Confirmá y mirá el aviso "+1 sello".</li>
+      <li>Volvé a la tarjeta: ya está en 1 de 10. Para mostrar un premio, en Administración abrí un cliente con 🎁, o ajustá sellos con un motivo.</li>
+      <li>En <strong>Pedidos</strong> (mozo · 1111) cargá un espresso y un panini en la Mesa 2 y tocá <strong>☕ Tarjeta del cliente</strong> para vincularla por celular o código.</li>
+      <li>En <strong>Caja 01</strong> (cajaa · 3333) cobrá la Mesa 2: marcá el premio y el total baja solo, sin pedir autorización.</li>
+      <li>Terminá en <strong>Administración</strong>: subieron los sellos, los premios canjeados y las ventas del club.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Usuarios de prueba</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Usuario</th><th>PIN</th><th>En Recompensas puede</th></tr></thead>
+      <tbody>
+        <tr><td>admin</td><td class="pin">1234</td><td>Configurar premios y reglas, activar o pausar el programa, ver clientes y métricas, ajustar sellos</td></tr>
+        <tr><td>cajaa / cajab</td><td class="pin">3333 / 4444</td><td>Buscar y registrar clientes, sumar sellos y canjear premios al cobrar</td></tr>
+        <tr><td>mozo</td><td class="pin">1111</td><td>Vincular la tarjeta del cliente a la mesa y registrar clientes</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>Módulo Premium de Mesa Pya'e · se activa por local con licencia; en los locales sin el módulo no aparece. Escanear con la cámara funciona en Chrome de Android; en el resto se escribe el celular o el código de 6 letras. Versión de prueba interna.</footer>
+</div>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Prueba del sistema · Mesa Pya'e Andrade</title>
+<link rel="icon" href="assets/logo-andrade.png">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  body { background: #F3EDE1; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  pre { background: #fff; border: 1px solid #ddd3c2; border-radius: 12px; padding: 16px; white-space: pre-wrap; font-size: 15px; line-height: 1.6; min-height: 80px; }
+  .ok { color: #2f6b3a; } .falla { color: #a1301f; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img src="assets/logo-andrade.png" alt="Andrade" style="width:110px">
+  <h1>Prueba completa del sistema</h1>
+  <p>Solo funciona en el proyecto de <b>prueba</b> y con la sesión de administrador abierta en este navegador. Crea usuarios de prueba (con PIN al azar que nadie ve), recorre pedido QR de mesa y takeaway, cocina, cobros en Caja 01 y Caja 02, cierres y reporte, y al final desactiva esos usuarios.</p>
+  <p><button class="btn" id="go">Iniciar prueba</button></p>
+  <pre id="out">Esperando…</pre>
+</div>
+<script src="assets/config.js"></script>
+<script src="assets/prueba-staging.js"></script>
+<script>
+  var out = document.getElementById('out'), go = document.getElementById('go');
+  var pid = (window.MESA_CONFIG && MESA_CONFIG.firebase && MESA_CONFIG.firebase.projectId) || '';
+  if (pid.indexOf('staging') < 0) { out.textContent = 'Esta prueba está deshabilitada fuera del proyecto de prueba.'; go.disabled = true; }
+  go.onclick = async function () {
+    go.disabled = true; out.textContent = 'Probando… (puede tardar 1 minuto)';
+    var t0 = Date.now();
+    var r = await pruebaStaging();
+    r.push('Duración: ' + Math.round((Date.now() - t0) / 1000) + ' s');
+    out.innerHTML = r.map(function (l) { var c = /^OK/.test(l) ? 'ok' : (/^(FALLA|ERROR)/.test(l) ? 'falla' : ''); return '<span class="' + c + '">' + l.replace(/[&<>]/g, function (x) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[x]; }) + '</span>'; }).join('\n');
+    go.disabled = false;
+  };
+</script>
+</body>
+</html>

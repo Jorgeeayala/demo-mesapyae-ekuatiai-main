@@ -1,0 +1,370 @@
+/* Mesa Pya'e — estilos base del sistema.
+   Colores de marca por defecto: los de Mesa Pya'e. Cada local los cambia en locales/<local>/local.json (tools/marca_local.py). */
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --crema: #F3EDE1;
+  --papel: #FBF8F2;
+  --papel-2: #F7F2E8;
+  --tinta: #1F1B17;
+  --tinta-2: #4A4038;
+  --tinta-3: #7A6E62;
+  --linea: #DED4C3;
+  --linea-2: #CDBFA9;
+  --tierra: #134E39;
+  --tierra-osc: #0E3B2A;
+  --arcilla: #C8562B;
+  --oliva: #4F6B3F;
+  --oliva-claro: #E3EAD9;
+  --mostaza: #B8862B;
+  --mostaza-claro: #F5E8C8;
+  --vino: #9B3B2F;
+  --vino-claro: #F4DDD8;
+  --azul: #3E5A73;
+  --azul-claro: #DDE6EE;
+  --r: 12px;
+  --r-s: 8px;
+  --sombra: 0 1px 2px rgba(31, 27, 23, .06), 0 4px 14px rgba(31, 27, 23, .06);
+  --f-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --f-tit: 'Oswald', 'Arial Narrow', 'Roboto Condensed', sans-serif;
+  --f-carta: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+html, body { overflow-x: hidden; overflow-x: clip; }  /* clip: evita el desplazamiento lateral sin romper las barras fijas (sticky) */
+body {
+  background: var(--crema); color: var(--tinta); font-family: var(--f-ui); font-size: 16px; line-height: 1.4;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--tierra-osc); }
+h1, h2, h3 { font-family: var(--f-tit); font-weight: 600; letter-spacing: .02em; margin: 0; text-transform: uppercase; }
+h1 { font-size: 1.5rem; } h2 { font-size: 1.2rem; } h3 { font-size: 1rem; }
+.muted { color: var(--tinta-3); }
+.small { font-size: .85rem; }
+.num { font-variant-numeric: tabular-nums; }
+.hidden, [hidden] { display: none !important; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.right { margin-left: auto; }
+.stack > * + * { margin-top: 10px; }
+
+/* ---------- barra superior ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 20; background: var(--papel); border-bottom: 1px solid var(--linea);
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px; min-height: 58px;
+}
+.topbar .logo { height: 40px; width: auto; display: block; }
+.topbar .modulo { font-family: var(--f-tit); text-transform: uppercase; letter-spacing: .06em; font-size: 1.05rem; }
+.topbar .usuario { font-size: .85rem; color: var(--tinta-2); text-align: right; line-height: 1.2; }
+.conn { font-size: .78rem; padding: 3px 8px; border-radius: 99px; background: var(--oliva-claro); color: var(--oliva); white-space: nowrap; }
+.conn.off { background: var(--vino-claro); color: var(--vino); }
+.conn.slow { background: var(--mostaza-claro); color: #7a5a14; }
+
+.banner { padding: 10px 16px; font-size: .92rem; border-bottom: 1px solid var(--linea); }
+.banner.error { background: var(--vino-claro); color: var(--vino); }
+.banner.warn { background: var(--mostaza-claro); color: #6d5212; }
+.banner.info { background: var(--azul-claro); color: var(--azul); }
+
+main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+/* ---------- botones ---------- */
+.btn {
+  appearance: none; border: 1px solid var(--linea-2); background: var(--papel); color: var(--tinta);
+  border-radius: var(--r-s); padding: 10px 16px; font-weight: 600; cursor: pointer; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; transition: transform .05s, background .15s;
+}
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.prim { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+.btn.prim:hover:not(:disabled) { background: #000; }
+.btn.ok { background: var(--oliva); color: #fff; border-color: var(--oliva); }
+.btn.warn { background: var(--mostaza); color: #fff; border-color: var(--mostaza); }
+.btn.danger { background: var(--papel); color: var(--vino); border-color: var(--vino); }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.small { min-height: 34px; padding: 6px 10px; font-size: .88rem; }
+.btn.big { min-height: 56px; font-size: 1.1rem; padding: 12px 22px; }
+.btn.block { width: 100%; }
+.iconbtn { min-width: 44px; padding: 0 10px; }
+
+/* ---------- tarjetas, chips ---------- */
+.card { background: var(--papel); border: 1px solid var(--linea); border-radius: var(--r); box-shadow: var(--sombra); }
+.card.pad { padding: 16px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: .78rem; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--papel-2); border: 1px solid var(--linea); white-space: nowrap; }
+.chip.oliva { background: var(--oliva-claro); color: var(--oliva); border-color: #c7d4b9; }
+.chip.mostaza { background: var(--mostaza-claro); color: #7a5a14; border-color: #e8d29b; }
+.chip.vino { background: var(--vino-claro); color: var(--vino); border-color: #e7beb6; }
+.chip.azul { background: var(--azul-claro); color: var(--azul); border-color: #c0cfdc; }
+.chip.tinta { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: none; border: 1px solid var(--linea-2); background: var(--papel); padding: 8px 14px; border-radius: 99px; font-weight: 600; cursor: pointer; min-height: 40px; font-size: .92rem; }
+.tab.on { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+.tab .badge { margin-left: 6px; }
+.badge:empty, .badge.zero { display: none; }
+.badge { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 99px; background: var(--arcilla); color: #fff; font-size: .75rem; text-align: center; }
+
+/* ---------- formularios ---------- */
+label.f { display: block; font-size: .85rem; font-weight: 600; color: var(--tinta-2); margin-bottom: 4px; }
+.input, select.input, textarea.input {
+  width: 100%; border: 1px solid var(--linea-2); background: #fff; border-radius: var(--r-s); padding: 10px 12px; min-height: 44px; font-size: 1rem;
+}
+.input:focus { outline: 2px solid var(--tierra); outline-offset: 1px; }
+textarea.input { min-height: 70px; resize: vertical; }
+.check { display: flex; align-items: center; gap: 8px; min-height: 40px; cursor: pointer; }
+.check input { width: 20px; height: 20px; accent-color: var(--tinta); }
+
+/* ---------- modal / hoja ---------- */
+.overlay { position: fixed; inset: 0; background: rgba(31, 27, 23, .45); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+@media (min-width: 700px) { .overlay { align-items: center; } }
+.sheet { background: var(--papel); width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; border-radius: 16px 16px 0 0; box-shadow: 0 -4px 30px rgba(0, 0, 0, .2); }
+@media (min-width: 700px) { .sheet { border-radius: 16px; } }
+.sheet.wide { max-width: 860px; }
+.sheet-h { position: sticky; top: 0; background: var(--papel); padding: 14px 16px; border-bottom: 1px solid var(--linea); display: flex; gap: 8px; align-items: center; z-index: 1; }
+.sheet-b { padding: 16px; }
+.sheet-f { position: sticky; bottom: 0; background: var(--papel); padding: 12px 16px; border-top: 1px solid var(--linea); display: flex; gap: 8px; }
+
+.toast-wrap { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; width: min(92vw, 440px); }
+.toast { background: var(--tinta); color: var(--papel); padding: 12px 16px; border-radius: 10px; box-shadow: var(--sombra); font-size: .95rem; }
+.toast.error { background: var(--vino); }
+.toast.ok { background: var(--oliva); }
+
+/* ---------- login ---------- */
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; position: relative; overflow: hidden; }
+.login-wrap::before, .login-wrap::after { content: ''; position: absolute; width: 90px; height: 84px; background: url(hoja.png) no-repeat center/contain; opacity: .35; pointer-events: none; }
+.login-wrap::before { top: 24px; left: 24px; transform: rotate(-20deg); }
+.login-wrap::after { bottom: 24px; right: 24px; transform: rotate(160deg); }
+.login { width: 100%; max-width: 360px; text-align: center; position: relative; z-index: 1; }
+.login .logo { width: 170px; margin: 0 auto 6px; display: block; }
+.login .sub { font-family: var(--f-tit); letter-spacing: .2em; text-transform: uppercase; font-size: .8rem; color: var(--tinta-2); margin-bottom: 20px; }
+.pin-dots { display: flex; justify-content: center; gap: 12px; margin: 14px 0; }
+.pin-dots span { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--tinta); }
+.pin-dots span.on { background: var(--tinta); }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.keypad button { min-height: 60px; font-size: 1.4rem; font-weight: 600; border-radius: 12px; border: 1px solid var(--linea-2); background: var(--papel); cursor: pointer; }
+.keypad button:active { background: var(--papel-2); }
+
+/* ---------- portal ---------- */
+.portal { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.tile { display: block; text-decoration: none; color: var(--tinta); padding: 22px 18px; }
+.tile h2 { font-size: 1.3rem; margin-bottom: 4px; }
+.tile:hover { border-color: var(--tinta); }
+
+/* ---------- mesas ---------- */
+.mesas { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.mesa { position: relative; text-align: left; padding: 12px; min-height: 100px; cursor: pointer; border: 2px solid var(--linea); background: var(--papel); border-radius: var(--r); }
+.mesa .n { font-family: var(--f-tit); font-size: 1.6rem; line-height: 1; }
+.mesa .s { font-size: .78rem; margin-top: 6px; color: var(--tinta-3); }
+.mesa .t { font-size: .9rem; font-weight: 600; margin-top: 2px; }
+.mesa.ocupada { border-color: var(--tierra); background: #fff; }
+.mesa.cierre { border-color: var(--mostaza); background: var(--mostaza-claro); }
+.mesa.listo { border-color: var(--oliva); box-shadow: 0 0 0 3px var(--oliva-claro); }
+.mesa.pend { border-color: var(--arcilla); box-shadow: 0 0 0 3px #f3dccd; }
+.mesa.pagada { border-color: #2f5d8a; background: #e6eef7; }
+.mesa.reservada { border-color: #6b4a8a; background: #efe8f5; border-style: dashed; }
+.mesa .flags { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+
+/* ---------- compositor de pedidos ---------- */
+.composer { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.composer > * { min-width: 0; }
+@media (min-width: 980px) { .composer { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; } .composer .cart { position: sticky; top: 74px; } }
+.prodlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.prod { text-align: left; padding: 12px 14px; border: 1px solid var(--linea); background: var(--papel); border-radius: var(--r-s); cursor: pointer; min-height: 64px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
+.prod:hover { border-color: var(--tierra); }
+.prod .pn { font-weight: 600; }
+.prod .pp { font-size: .9rem; color: var(--tierra-osc); font-weight: 600; }
+.prod.agotado { opacity: .5; cursor: not-allowed; }
+.cart .line { display: flex; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--linea); }
+.cart .line:last-child { border-bottom: 0; }
+.qty { display: inline-flex; align-items: center; border: 1px solid var(--linea-2); border-radius: 99px; overflow: hidden; }
+.qty button { width: 34px; height: 34px; border: 0; background: var(--papel-2); font-size: 1.1rem; cursor: pointer; }
+.qty span { min-width: 28px; text-align: center; font-weight: 700; }
+.total-row { display: flex; justify-content: space-between; font-size: 1.15rem; font-weight: 700; padding: 10px 0; }
+.opt-group { margin-bottom: 16px; }
+.opt-group h3 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: .95rem; }
+.opt { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--linea); border-radius: var(--r-s); margin-bottom: 6px; cursor: pointer; background: #fff; min-height: 46px; }
+.opt.on { border-color: var(--tinta); box-shadow: inset 0 0 0 1px var(--tinta); }
+.opt input { width: 20px; height: 20px; accent-color: var(--tinta); }
+
+/* ---------- comandas (cocina y detalle) ---------- */
+.ticket { background: #fff; border: 1px solid var(--linea); border-radius: var(--r); box-shadow: var(--sombra); overflow: hidden; display: flex; flex-direction: column; }
+.ticket-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--papel-2); border-bottom: 1px solid var(--linea); }
+.ticket-h .tn { font-family: var(--f-tit); font-size: 1.35rem; }
+.ticket-h .tw { font-size: 1.05rem; font-weight: 700; }
+.ticket-b { padding: 10px 12px; flex: 1; }
+.ticket-i { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--linea); }
+.ticket-i:last-child { border-bottom: 0; }
+.ticket-i .q { font-family: var(--f-tit); font-size: 1.3rem; min-width: 34px; }
+.ticket-i .nm { font-weight: 700; font-size: 1.08rem; }
+.ticket-i .op { font-size: .95rem; color: var(--tinta-2); }
+.nota { background: var(--mostaza-claro); border-left: 4px solid var(--mostaza); padding: 6px 8px; margin-top: 4px; font-weight: 600; font-size: .95rem; border-radius: 4px; }
+.ticket-f { padding: 10px 12px; border-top: 1px solid var(--linea); display: flex; gap: 8px; }
+.anulado { text-decoration: line-through; opacity: .55; }
+.elapsed { font-variant-numeric: tabular-nums; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--oliva-claro); color: var(--oliva); }
+.elapsed.w { background: var(--mostaza-claro); color: #7a5a14; }
+.elapsed.d { background: var(--vino); color: #fff; }
+
+/* ---------- cocina ---------- */
+body.cocina { background: #EFE8DA; }
+.kcols { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 900px) { .kcols { grid-template-columns: 1.15fr 1.15fr .8fr; } }
+.kcol h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 1.15rem; }
+.kcol .list { display: grid; gap: 12px; }
+.kcol.nuevos .ticket { border-top: 5px solid var(--arcilla); }
+.kcol.prep .ticket { border-top: 5px solid var(--mostaza); }
+.kcol.listos .ticket { border-top: 5px solid var(--oliva); }
+.flash { animation: flash 1.2s ease-in-out 3; }
+@keyframes flash { 50% { box-shadow: 0 0 0 6px rgba(169, 100, 60, .45); } }
+
+/* ---------- tablas ---------- */
+.tbl { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.tbl th, .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--linea); text-align: left; vertical-align: top; }
+.tbl th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--tinta-3); font-weight: 600; background: var(--papel-2); }
+.tbl td.r, .tbl th.r { text-align: right; }
+.tbl-wrap { overflow-x: auto; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.kpi { padding: 14px; }
+.kpi .v { font-family: var(--f-tit); font-size: 1.6rem; }
+.kpi .l { font-size: .8rem; color: var(--tinta-3); text-transform: uppercase; letter-spacing: .04em; }
+
+.grid2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 900px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+.section-h { display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; }
+.empty { text-align: center; padding: 26px 12px; color: var(--tinta-3); border: 1px dashed var(--linea-2); border-radius: var(--r); }
+
+/* ---------- impresión ---------- */
+@media print {
+  .topbar, .no-print, .toast-wrap, .banner { display: none !important; }
+  body { background: #fff; }
+  main { padding: 0; }
+  .card { box-shadow: none; }
+}
+
+/* ---------- comanda impresa (botón 🖨 de cada ticket) ---------- */
+#comanda-print { display: none; }
+@media print {
+  body.imprimiendo > *:not(#comanda-print) { display: none !important; }
+  body.imprimiendo #comanda-print { display: block; }
+  body.imprimiendo { background: #fff; margin: 0; }
+}
+#comanda-print { width: 100%; max-width: 76mm; margin: 0 auto; padding: 2mm 1mm; color: #000; font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; }
+#comanda-print hr { border: 0; border-top: 1px dashed #000; margin: 5px 0; }
+#comanda-print .cp-neg { text-align: center; font-weight: 700; }
+#comanda-print .cp-num { text-align: center; font-size: 26px; font-weight: 800; letter-spacing: 1px; margin-top: 2px; }
+#comanda-print .cp-dest { text-align: center; font-size: 17px; font-weight: 800; }
+#comanda-print .cp-meta { text-align: center; font-size: 11px; }
+#comanda-print .ci { margin: 4px 0; font-size: 13px; }
+#comanda-print .ci b { font-size: 14px; }
+#comanda-print .ci > span { float: right; }
+#comanda-print .ci.an { text-decoration: line-through; }
+#comanda-print .obs { font-weight: 700; }
+#comanda-print .cp-club, .cp-club { text-align: center; font-size: 12px; }
+.cp-club .cp-qr { width: 30mm; margin: 4px auto; }
+.cp-club .cp-qr svg { width: 100%; height: auto; display: block; }
+#comanda-print .cp-msg, .cp-msg { text-align: center; font-weight: 700; margin-top: 4px; }
+
+/* Menú del cliente: una sola columna a todo el ancho; categorías visibles completas en pantallas anchas */
+.composer.publico { grid-template-columns: minmax(0, 1fr) !important; }
+@media (min-width: 700px) { .publico .tabs { flex-wrap: wrap; overflow-x: visible; } }
+@media (max-width: 699px) {
+  .tabs { -webkit-mask-image: linear-gradient(to right, #000 85%, transparent); mask-image: linear-gradient(to right, #000 85%, transparent); padding-right: 24px; }
+}
+
+/* Cocina: niveles de demora (cocina_alerta_min = 5,10,15 por defecto) */
+.ticket.dem1 { background: #FFF4C7; border-color: #D9B23C; box-shadow: 0 0 0 3px #F1D477; }
+.ticket.dem1 .ticket-h { background: #F6DF8E; }
+.ticket.dem2 { background: #FFE3C7; border-color: #D9822B; box-shadow: 0 0 0 3px #F2B26F; }
+.ticket.dem2 .ticket-h { background: #F5BE80; }
+.ticket.dem3 { background: #FAD4CE; border-color: var(--vino); box-shadow: 0 0 0 4px #E58A7C; animation: pulso 1.6s ease-in-out infinite; }
+.ticket.dem3 .ticket-h { background: #E9A296; }
+@keyframes pulso { 50% { box-shadow: 0 0 0 7px #E58A7C; } }
+@media (prefers-reduced-motion: reduce) { .ticket.dem3 { animation: none; } }
+.dem-tag { font-family: var(--f-tit); font-size: .82rem; letter-spacing: .06em; background: var(--tinta); color: #fff; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.banner.demora { background: #F6DF8E; color: #3d2f08; font-weight: 600; border-radius: 8px; margin-bottom: 12px; display: flex; gap: 14px; flex-wrap: wrap; }
+.banner.demora .n1, .banner.demora .n2, .banner.demora .n3 { padding: 2px 10px; border-radius: 6px; }
+.banner.demora .n1 { background: #FFF4C7; } .banner.demora .n2 { background: #F5BE80; } .banner.demora .n3 { background: var(--vino); color: #fff; }
+
+/* Firma del sistema: el logo es del local; la firma identifica a Mesa Pya'e / Ser o Límites */
+.topbar .marca { display: flex; flex-direction: column; align-items: center; text-decoration: none; line-height: 1; }
+.powered { display: flex; align-items: center; gap: 4px; font-size: .55rem; letter-spacing: .04em; color: var(--tinta-3); white-space: nowrap; margin-top: 3px; }
+.powered img { height: 18px; width: auto; display: block; }
+.powered-login { margin-top: 16px; font-size: .7rem; letter-spacing: .06em; color: var(--tinta-3); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.powered-login img { height: 30px; width: auto; }
+.mp-pie { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; text-transform: none; letter-spacing: .06em; font-size: .7rem; color: var(--tinta-3); }
+.mp-pie img { height: 26px; width: auto; }
+.powered-login strong { color: var(--tinta-2); font-weight: 600; }
+@media (max-width: 520px) { .powered { display: none; } }
+
+/* Cocina · vista tablero: todos los pedidos a la vista (pantallas de 900 px o más). */
+@media (min-width: 900px) {
+  body.tablero #main { padding-top: 10px; padding-bottom: 0; }
+  body.tablero .kcols { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, .75fr); gap: 10px; overflow: hidden; }
+  body.tablero .kcol { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  body.tablero .kcol h2 { font-size: 1.05em; margin-bottom: 6px; }
+  /* tarjetas apiladas sin huecos (las reparte cocina.html en columnas, la más vieja arriba a la izquierda) */
+  body.tablero .kcol .list { display: flex; gap: .5em; align-items: flex-start; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+  body.tablero .kcol .list > .mcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: .5em; }
+  body.tablero .kcol .list > .empty { flex: 1; }
+  body.tablero .ticket { font-size: 1em; }
+  body.tablero .ticket-h { padding: .35em .55em; gap: .35em; flex-wrap: wrap; }
+  body.tablero .ticket-h .tn { font-size: 1.2em; }
+  body.tablero .ticket-h .tw { font-size: .92em; white-space: normal; line-height: 1.1; }
+  body.tablero .ticket-b { padding: .35em .55em; }
+  body.tablero .ticket-i { padding: .18em 0; gap: .4em; }
+  body.tablero .ticket-i .q { font-size: 1.05em; min-width: 1.6em; }
+  body.tablero .ticket-i .nm { font-size: .95em; }
+  body.tablero .ticket-i .op, body.tablero .nota { font-size: .82em; }
+  body.tablero .nota { padding: .2em .4em; margin-top: .15em; }
+  body.tablero .ticket-b > .small.muted { display: none; }
+  body.tablero .ticket-f { padding: .35em .55em; gap: .35em; }
+  body.tablero .ticket-f .btn { min-height: 2.3em; padding: .2em .6em; font-size: .9em; }
+  body.tablero .kcol.listos .ticket-b { display: none; }
+  body.tablero .empty { padding: 1em .5em; }
+}
+
+/* Categorías del compositor (mozo, caja y menú QR): en pantallas medianas y grandes se ven TODAS (varias filas);
+   en celular, fila deslizable con barra de desplazamiento visible. */
+@media (min-width: 700px) { .tabs.cats { flex-wrap: wrap; overflow-x: visible; -webkit-mask-image: none; mask-image: none; padding-right: 0; } }
+@media (max-width: 699px) {
+  .tabs.cats { scrollbar-width: thin; scrollbar-color: var(--tinta-3) transparent; padding-bottom: 8px; }
+  .tabs.cats::-webkit-scrollbar { display: block; height: 6px; }
+  .tabs.cats::-webkit-scrollbar-thumb { background: var(--tinta-3); border-radius: 3px; }
+}
+
+/* Sub-cuentas por persona */
+.para-quien { margin-bottom: 10px; }
+.chips-p { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.chip-p { font: inherit; font-size: .88rem; border: 1px solid var(--linea-2); background: var(--papel); color: var(--tinta); border-radius: 999px; padding: 6px 12px; cursor: pointer; min-height: 36px; }
+.chip-p.on { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+.personas-box { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.persona-t { border: 1px solid var(--linea); background: var(--papel); border-radius: 10px; padding: 6px 10px; font-size: .88rem; }
+.persona-t b { font-weight: 600; } .persona-t .num { color: var(--tinta-3); margin-left: 6px; }
+.persona-t.ok { border-color: var(--oliva); background: var(--oliva-claro); }
+.ticket-i .quien { font-size: .8rem; font-weight: 600; color: var(--azul); }
+
+/* ---------- módulo premium: recompensas ---------- */
+.banner.ok { background: var(--oliva-claro); color: var(--oliva); }
+.chip.rec { background: var(--mostaza-claro); color: #6d5212; }
+.rec-box { background: var(--papel-2); border-color: var(--mostaza); }
+.rec-promo { border-color: var(--mostaza); background: linear-gradient(180deg, var(--papel) 0%, var(--mostaza-claro) 160%); }
+.rec-sellos { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.rec-sello { width: 34px; height: 34px; border-radius: 50%; border: 2px dashed var(--linea-2); display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; color: var(--tinta-3); background: var(--papel); }
+.rec-sello.on { border: 2px solid var(--tierra); background: var(--tierra); color: #fff; font-size: 1rem; }
+
+/* ---------- módulos gold: menú 3D y reseñas ---------- */
+.v3d { width: 100%; aspect-ratio: 1 / 1; max-height: 62vh; border-radius: 14px; overflow: hidden; background: radial-gradient(circle at 50% 40%, var(--papel) 0%, var(--crema) 70%); position: relative; }
+.v3d model-viewer { width: 100%; height: 100%; --poster-color: transparent; }
+.v3d-load { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--tinta-3); text-align: center; padding: 16px; }
+.v3d-ar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); }
+.v3d-chip { background: var(--tinta); color: var(--papel); font-family: var(--f-tit); letter-spacing: .08em; font-size: .7rem; padding: 2px 8px; vertical-align: 2px; cursor: pointer; }
+.v3d-btn { margin-bottom: 12px; }
+.estrellas { display: flex; gap: 6px; margin: 10px 0; }
+.estrella { font-size: 2rem; line-height: 1; background: none; border: 0; color: var(--linea-2); cursor: pointer; padding: 2px; min-width: 44px; min-height: 44px; }
+.estrella.on { color: var(--mostaza); }
+.resena-google { display: grid; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--linea); text-align: center; }
+.stars { color: var(--mostaza); letter-spacing: 1px; } .stars .off { color: var(--linea-2); }
+.res-baja { border-color: var(--vino); }

@@ -1,0 +1,69 @@
+[build]
+  publish = "public"
+  # Con MESA_LOCAL=<local> arma el sitio de ese local; sin variables publica la base neutra de Mesa Pya'e.
+  command = "sh tools/netlify_build.sh"
+  # Publica solo los sitios afectados: un alta no vuelve a publicar los otros locales (ver tools/netlify_publicar.js).
+  ignore = "node tools/netlify_publicar.js"
+
+[build.environment]
+  # La apiKey de la app web de Firebase (assets/config.js) es pública por diseño (la protegen las reglas de Firestore).
+  # Se desactiva solo la detección "inteligente" que la confunde con un secreto; el escaneo de variables secretas sigue activo.
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+
+# API: cada local apunta /api a su servidor desde locales/<local>/local.json (sitio.api_url);
+# tools/marca_local.py escribe public/_redirects en el build (MESA_LOCAL=<local>). La base neutra no tiene servidor.
+
+# URLs limpias: /menu, /cocina, /caja, /pedidos, /admin, /tarjeta
+[[headers]]
+  for = "/app/modelos/*"
+  [headers.values]
+    Content-Type = "model/gltf-binary"
+
+[[headers]]
+  for = "/modelos/*"
+  [headers.values]
+    Content-Type = "model/gltf-binary"
+    Access-Control-Allow-Origin = "*"
+
+[[redirects]]
+  from = "/resena"
+  to = "/resena.html"
+  status = 200
+[[redirects]]
+  from = "/tarjeta"
+  to = "/tarjeta.html"
+  status = 200
+[[redirects]]
+  from = "/menu"
+  to = "/menu.html"
+  status = 200
+[[redirects]]
+  from = "/cocina"
+  to = "/cocina.html"
+  status = 200
+[[redirects]]
+  from = "/pedidos"
+  to = "/pedidos.html"
+  status = 200
+[[redirects]]
+  from = "/caja"
+  to = "/caja.html"
+  status = 200
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
+# CSP: cdn.jsdelivr.net = visor 3D (model-viewer, se carga solo al tocar 3D); blob:/https: = texturas del modelo y fotos de los platos
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), xr-spatial-tracking=(self), microphone=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: data: https://*.cloudfunctions.net https://firestore.googleapis.com https://*.googleapis.com https://www.gstatic.com; worker-src 'self' blob:; frame-ancestors 'self' https://www.appsheet.com https://*.appsheet.com"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=300"

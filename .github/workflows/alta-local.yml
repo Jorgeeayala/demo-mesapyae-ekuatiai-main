@@ -1,0 +1,128 @@
+# E3 · Alta de un local nuevo con un botón: crea su proyecto en la carpeta Clientes, le vincula la facturación,
+# le pone un presupuesto de USD 10 (solo alertas), lo agrega a Firebase, publica su servidor y abre un pull request
+# con los datos de su sitio (locales/<local>/local.json → sitio). Al unir ese pull request a `estable`, el local aparece solo
+# en el sitio único (E4): https://<SITIO_UNICO>/<local>/menu, /caja, /admin… (Netlify publica el sitio único desde estable).
+# Antes: la carpeta locales/<local>/ tiene que estar en la rama elegida (la arma la skill de alta y entra por pull request).
+name: alta-local
+
+on:
+  workflow_dispatch:
+    inputs:
+      local:
+        description: "Carpeta del local (ej. pizzeria-don-luis)"
+        required: true
+      proyecto:
+        description: "ID del proyecto de Google Cloud (vacío = <local>-mesapyae)"
+        required: false
+        default: ""
+      rama:
+        description: "Rama donde está la carpeta del local"
+        required: true
+        default: main
+        type: choice
+        options: [main, estable]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+env:
+  CARPETA_CLIENTES: "188823144806"
+  FACTURACION: "01917F-CDBAA5-F38FEC"
+  CENTRAL: mesapyae-central
+  SITIO_UNICO: mesapyae.serolimites.com
+
+jobs:
+  alta:
+    runs-on: ubuntu-latest
+    environment: clientes
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.rama }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Datos del local
+        id: d
+        run: |
+          L="${{ inputs.local }}"
+          echo "$L" | grep -Eq '^[a-z0-9-]{3,40}$' || { echo "Nombre de local inválido: $L"; exit 1; }
+          [ -f "locales/$L/local.json" ] || { echo "No existe locales/$L/local.json en la rama ${{ inputs.rama }}"; exit 1; }
+          node tools/validar_local.js "$L"
+          P="${{ inputs.proyecto }}"; [ -n "$P" ] || P="$L-mesapyae"
+          echo "$P" | grep -Eq '^[a-z][a-z0-9-]{4,28}[a-z0-9]$' || { echo "ID de proyecto inválido: $P"; exit 1; }
+          echo "proyecto=$P" >> "$GITHUB_OUTPUT"
+          echo "nombre=$(node -e "process.stdout.write(String(require('./locales/$L/local.json').nombre||'$L').slice(0,22))")" >> "$GITHUB_OUTPUT"
+          echo "plan=$(node -e "process.stdout.write(String(require('./locales/$L/local.json').plan||'BASICO'))")" >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_PROVEEDOR }}
+          service_account: ${{ vars.GCP_CUENTA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Proyecto en la carpeta Clientes
+        run: |
+          P="${{ steps.d.outputs.proyecto }}"
+          if gcloud projects describe "$P" >/dev/null 2>&1; then echo "El proyecto $P ya existe: se usa ese."
+          else gcloud projects create "$P" --folder="$CARPETA_CLIENTES" --name="${{ steps.d.outputs.nombre }}"; fi
+          gcloud billing projects link "$P" --billing-account="$FACTURACION"
+      - name: Presupuesto de USD 10 (solo alertas)
+        run: |
+          P="${{ steps.d.outputs.proyecto }}"; N="Mesa Pya'e · ${{ inputs.local }}"
+          if gcloud billing budgets list --billing-account="$FACTURACION" --billing-project="$CENTRAL" --format='value(displayName)' | grep -Fxq "$N"; then
+            echo "Ya tiene presupuesto."
+          else
+            gcloud billing budgets create --billing-account="$FACTURACION" --billing-project="$CENTRAL" --display-name="$N" \
+              --budget-amount=10USD --filter-projects="projects/$P" \
+              --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0
+          fi
+      - name: Agregar a Firebase
+        run: |
+          P="${{ steps.d.outputs.proyecto }}"
+          npx -y firebase-tools projects:list --json 2>/dev/null | grep -q "\"projectId\": \"$P\"" || \
+            npx -y firebase-tools projects:addfirebase "$P"
+      - name: Publicar el servidor
+        run: |
+          sh tools/paquete_local.sh /tmp/mesa-local.tgz "${{ inputs.local }}"
+          mkdir -p /tmp/pub && tar xzf /tmp/mesa-local.tgz -C /tmp/pub
+          cd /tmp/pub/mesa-local && sh firebase/desplegar.sh "${{ steps.d.outputs.proyecto }}" "${{ steps.d.outputs.plan }}" </dev/null | tee /tmp/desplegar.log
+      - name: Verificar que responde
+        run: |
+          # En un proyecto recién creado los permisos tardan unos minutos en aplicarse: se reintenta hasta 8 minutos.
+          for i in $(seq 1 16); do
+            R=$(curl -s -X POST -H 'Content-Type: application/json' -d '{"action":"health"}' "https://southamerica-east1-${{ steps.d.outputs.proyecto }}.cloudfunctions.net/api")
+            echo "$(date +%H:%M:%S) $(echo "$R" | head -c 200)"
+            echo "$R" | grep -q '"ok":true' && exit 0
+            sleep 30
+          done
+          echo "::error::El servidor no respondió bien en 8 minutos."; exit 1
+      - name: Respaldo diario y vigilancia del servidor nuevo
+        continue-on-error: true
+        env:
+          SOLO: ${{ inputs.local }}
+        run: |
+          # El local todavía no tiene sitio.api_url en local.json: se vigila por su proyecto.
+          P="${{ steps.d.outputs.proyecto }}"
+          node -e "const f='locales/${{ inputs.local }}/local.json',fs=require('fs'),j=JSON.parse(fs.readFileSync(f));j.sitio=Object.assign({},j.sitio,{api_url:'https://southamerica-east1-$P.cloudfunctions.net/api'});fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
+          sh tools/vigilancia.sh
+          git checkout -- "locales/${{ inputs.local }}/local.json"
+      - name: Pull request con los datos del sitio
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          L="${{ inputs.local }}"; P="${{ steps.d.outputs.proyecto }}"
+          node -e "
+            const fs=require('fs'); const f='locales/$L/local.json'; const j=JSON.parse(fs.readFileSync(f,'utf8'));
+            const log=fs.readFileSync('/tmp/desplegar.log','utf8'); const g=(k)=>((log.match(new RegExp('\"'+k+'\": \"([^\"]+)\"'))||[])[1]);
+            j.sitio=Object.assign({}, j.sitio, { api_url:'https://southamerica-east1-$P.cloudfunctions.net/api',
+              firebase:{ projectId:g('projectId')||'$P', apiKey:g('apiKey'), appId:g('appId') } });
+            fs.writeFileSync(f, JSON.stringify(j,null,2)+'\n');"
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          B="alta-servidor-$L"; git checkout -b "$B"; git add "locales/$L/local.json"
+          git commit -m "Alta $L: servidor publicado en $P (datos del sitio)" || { echo "Sin cambios en local.json"; exit 0; }
+          git push -f origin "$B"
+          gh pr create --base "${{ inputs.rama }}" --head "$B" --title "Alta $L: datos del sitio ($P)" \
+            --body "Servidor publicado por la acción alta-local en el proyecto $P (carpeta Clientes, presupuesto USD 10). Al unir este pull request a estable, el local queda en https://$SITIO_UNICO/$L/ (carta: /$L/menu, personal: /$L/). Después: Administración → Mesas y QR → imprimir los QR." \
+            || echo "::warning::No se pudo abrir el pull request solo (GitHub → Settings → Actions → General → 'Allow GitHub Actions to create and approve pull requests'). Abrilo a mano: https://github.com/${{ github.repository }}/compare/${{ inputs.rama }}...$B?expand=1"

@@ -1,0 +1,15 @@
+data/dev-db.json
+data/.dev-secret
+node_modules/
+dist-demo/
+tests/capturas/*.png
+firebase/functions/node_modules/
+firebase/.firebaserc
+*.zip
+*.tgz
+.env
+dist-demo-premium/
+dist-demo-planes/
+firebase/functions/lib/local.json
+locales/*/privado/
+dist-extension-*/

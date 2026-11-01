@@ -1,0 +1,64 @@
+{
+  "_nota": "Local de PRUEBA (ficticio) para probar la acción alta-local de E3. No es un cliente real; su proyecto de Google Cloud se borra después de la prueba.",
+  "slug": "prueba-alta",
+  "nombre": "Prueba de Alta",
+  "nombre_corto": "Prueba Alta",
+  "direccion": "Av. de los Ejemplos 1234 · Asunción",
+  "plan": "BASICO",
+  "colores": {
+    "principal": "#2F5D62",
+    "secundario": "#C8553D"
+  },
+  "mesas": 12,
+  "puntos": {
+    "salon": {
+      "nombre": "Salón principal",
+      "corto": "Salón"
+    },
+    "para_llevar": {
+      "activo": true,
+      "nombre": "Para llevar (mostrador)",
+      "corto": "Para llevar",
+      "lugar": "el mostrador"
+    }
+  },
+  "cajas": {
+    "A": "Caja 01 — Salón",
+    "B": "Caja 02 — Para llevar"
+  },
+  "config": {
+    "medios_pago": "EFECTIVO,TRANSFERENCIA,TC,TD",
+    "cuenta_qr_habilitada": "SI"
+  },
+  "sitio": {
+    "api_url": "https://southamerica-east1-prueba-alta-mesapyae.cloudfunctions.net/api",
+    "firebase": {
+      "projectId": "prueba-alta-mesapyae",
+      "apiKey": "AIzaSyDNuMZC4tSLBXurr_p2IYb2azcfQwfaG2Y",
+      "appId": "1:894482415164:web:e13635c7af8add2cd3cd39"
+    }
+  },
+  "empresa": {
+    "razon_social": "Ejemplo S.A.",
+    "ruc": "80000000-0"
+  },
+  "equipo": [
+    {
+      "nombre": "Ana Ejemplo",
+      "rol": "ADMIN"
+    },
+    {
+      "nombre": "Bruno Ejemplo",
+      "rol": "MOZO"
+    },
+    {
+      "nombre": "Carla Ejemplo",
+      "rol": "COCINA"
+    },
+    {
+      "nombre": "Diego Ejemplo",
+      "rol": "CAJA",
+      "caja": "A"
+    }
+  ]
+}

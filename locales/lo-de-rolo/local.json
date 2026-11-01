@@ -1,0 +1,94 @@
+{
+  "slug": "lo-de-rolo",
+  "nombre": "Lo de Rolo",
+  "nombre_corto": "Lo de Rolo",
+  "direccion": "Calle sargento Eladio del Puerto y Florida · Santa Rosa Misiones",
+  "dominio": "lo-de-rolo-mesapyae.netlify.app",
+  "plan": "BASICO",
+  "colores": {
+    "principal": "#8F2E1F",
+    "secundario": "#C67D35",
+    "fondo_icono": "#E3C89C"
+  },
+  "mesas": 18,
+  "puntos": {
+    "salon": {
+      "nombre": "Salón",
+      "corto": "Salón"
+    },
+    "para_llevar": {
+      "activo": true,
+      "nombre": "Para llevar (mostrador)",
+      "corto": "Para llevar",
+      "lugar": "el mostrador"
+    }
+  },
+  "cajas": {
+    "A": "Caja 01 — Salón",
+    "B": "Caja 02 — Para llevar"
+  },
+  "config": {
+    "medios_pago": "EFECTIVO,TRANSFERENCIA",
+    "cuenta_qr_habilitada": "NO",
+    "para_llevar_qr_atiende": "EQUIPO",
+    "para_llevar_whatsapp": "OPCIONAL"
+  },
+  "sitio": {
+    "api_url": "https://southamerica-east1-lo-de-rolo-mesapyae.cloudfunctions.net/api",
+    "firebase": {
+      "projectId": "lo-de-rolo-mesapyae",
+      "apiKey": "AIzaSyB6IT827JkC2JG8y1wF07kgTudrz4oDxYo",
+      "appId": "1:186456552240:web:0139820a1fbade520c0ef5"
+    }
+  },
+  "empresa": {
+    "razon_social": "Natalia Olmedo",
+    "ruc": "4809758-6"
+  },
+  "contacto": {
+    "responsable": "Natalia Olmedo",
+    "whatsapp": "+595 971764067",
+    "email": "natiolmedogonz@gmail.com"
+  },
+  "equipo": [
+    {
+      "nombre": "Natalia Olmedo",
+      "rol": "ADMIN"
+    },
+    {
+      "nombre": "Milagros Benítez",
+      "rol": "ADMIN"
+    },
+    {
+      "nombre": "Valeria Ruiz Díaz",
+      "rol": "ADMIN"
+    },
+    {
+      "nombre": "Mariam Flores",
+      "rol": "CAJA",
+      "caja": "A"
+    },
+    {
+      "nombre": "Andrea Ortiz",
+      "rol": "MOZO"
+    },
+    {
+      "nombre": "Eva Rodas",
+      "rol": "MOZO"
+    },
+    {
+      "nombre": "Araceli Recalde",
+      "rol": "COCINA"
+    },
+    {
+      "nombre": "Valeria Rojas",
+      "rol": "COCINA"
+    }
+  ],
+  "horarios": "De lunes a domingo 14:00 hs a 22:00 hs",
+  "ficha": {
+    "enviado": "2026-10-20T14:24:47-03:00",
+    "carpeta": "https://drive.google.com/drive/folders/1KR0FxtY3Y-FOyDkrOgtNnoKjunjCbigr",
+    "respuesta_id": "2_ABaOnufQfep_phf9xrE0F7Rgv6qJWxsbMvXlciKZxGUA6yq_TEFwS2say7A6wwFerbp2eNs"
+  }
+}

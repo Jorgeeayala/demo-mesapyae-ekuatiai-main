@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3EDE1">
+<title>Tu Local Gastronómico · Menú</title>
+<link rel="icon" href="assets/logo-local.png">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  body.publico { background: var(--crema); }
+  .pub-head { text-align: center; padding: 18px 16px 8px; position: relative; overflow: hidden; }
+  .pub-head::before, .pub-head::after { content: ''; position: absolute; top: 34px; width: 46px; height: 43px; background: url(assets/hoja.png) no-repeat center/contain; opacity: .4; }
+  .pub-head::before { left: calc(50% - 130px); transform: rotate(-30deg); } .pub-head::after { right: calc(50% - 130px); transform: scaleX(-1) rotate(-30deg); }
+  .publico .tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--crema); padding: 8px 0; margin-bottom: 4px !important; box-shadow: 0 6px 8px -8px rgba(31, 27, 23, .35); }
+  /* La lista ocupa al menos una pantalla: al pasar a una categoría corta, la barra de categorías no se mueve */
+  .publico [data-list] { min-height: calc(100vh - 64px); min-height: calc(100dvh - 64px); }
+  .pub-head img { width: 150px; }
+  .pub-head .donde { font-family: var(--f-tit); letter-spacing: .14em; text-transform: uppercase; margin-top: 4px; }
+  .publico main { max-width: 760px; padding-top: 4px; }
+  .publico .prodlist { grid-template-columns: 1fr; gap: 0; }
+  .publico .prod { border: 0; border-bottom: 1px solid var(--linea); border-radius: 0; background: transparent; padding: 14px 4px; }
+  .publico .prod .pn { font-family: var(--f-carta); font-size: 1.12rem; font-weight: 600; }
+  .publico .prod .pp { font-family: var(--f-carta); font-size: 1rem; color: var(--tinta); }
+  .publico .prod.con-foto { flex-direction: row; align-items: center; gap: 14px; }
+  .publico .prod.con-foto .prod-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .publico .prod-foto { order: 2; width: 104px; height: 104px; object-fit: cover; border-radius: 12px; flex: none; background: var(--linea); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .prod-hero { display: block; width: calc(100% + 32px); margin: -16px -16px 14px; aspect-ratio: 4 / 3; object-fit: cover; background: var(--linea); }
+  .cuenta-cta { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+  .cta-cuenta-pie { margin: 14px 0 0; }
+  .cuenta-items .ci { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--linea); }
+  .cuenta-items .ci .grow { min-width: 0; }
+  .medios .opt { flex: 1 1 45%; }
+  .res-cta { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; margin: 14px 0 0; }
+  .publico .tab { font-family: var(--f-tit); text-transform: uppercase; letter-spacing: .05em; font-weight: 500; }
+  .estado-steps { display: flex; justify-content: space-between; margin: 18px 0; }
+  .estado-steps div { flex: 1; text-align: center; font-size: .7rem; padding: 0 2px; word-break: break-word; color: var(--tinta-3); position: relative; }
+  .estado-steps div::before { content: ''; display: block; width: 16px; height: 16px; border-radius: 50%; margin: 0 auto 6px; border: 2px solid var(--linea-2); background: var(--papel); }
+  .estado-steps div.on { color: var(--tinta); font-weight: 600; }
+  .estado-steps div.on::before { background: var(--oliva); border-color: var(--oliva); }
+  footer.pub { text-align: center; font-size: .78rem; color: var(--tinta-3); padding: 24px 16px 40px; letter-spacing: .1em; text-transform: uppercase; }
+</style>
+</head>
+<body class="publico">
+<div id="app"><div class="pub-head"><img src="assets/logo-local.png" alt="Tu Local Gastronómico"></div><main><div class="empty">Cargando menú…</div></main></div>
+<script src="assets/config.js"></script>
+<script src="assets/lib.js"></script>
+<script src="assets/composer.js"></script>
+<script src="assets/menu3d.js"></script>
+<script src="assets/armador-dibujos.js"></script>
+<script src="assets/armador.js"></script>
+<script>
+(function () {
+  var M = Mesa, esc = M.esc, gs = M.gs;
+  var params = new URLSearchParams(location.search);
+  var token = params.get('t') || (location.hash.match(/t=([a-z0-9]+)/) || [])[1] || '';
+  if (!token && window.MESA_CONFIG && window.MESA_CONFIG.demo && window.MesaDemo) token = window.MesaDemo.qr().mesas[0].token;
+  var KEY = 'mesapyae.mispedidos.' + token;
+  var info = null;
+
+  function head(sub) {
+    return '<div class="pub-head"><img src="assets/logo-local.png" alt="Tu Local Gastronómico"><div class="donde">' + esc(sub || '') + '</div></div>';
+  }
+  function misPedidos() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } }
+  function guardar(p) { try { var l = misPedidos(); l.unshift(p); localStorage.setItem(KEY, JSON.stringify(l.slice(0, 10))); } catch (e) { } }
+
+  function error(msg) {
+    document.getElementById('app').innerHTML = head('') + '<main><div class="card pad" style="text-align:center"><h2>Ups</h2><p>' + esc(msg) + '</p><p class="muted small">Si estás en el local, pedile ayuda a un mozo.</p></div></main>';
+  }
+
+  if (!token) return error('Este enlace no tiene código de mesa. Escaneá el QR de tu mesa o del mostrador.');
+
+  M.call('public.resolve', { token: token }, { publico: true, retries: 2 }).then(function (d) {
+    info = d; render();
+  }, function (e) { error(e.message || 'No pudimos cargar el menú.'); });
+
+  // Categoría y búsqueda elegidas: se conservan al volver del estado del pedido o al recargar
+  var vista = (function () { try { return JSON.parse(sessionStorage.getItem('mesapyae.vista.' + token) || 'null'); } catch (e) { return null; } })();
+  function render() {
+    var sub = info.tipo === 'MESA' ? info.mesa : 'Para llevar';
+    var mis = misPedidos();
+    document.getElementById('app').innerHTML = head(sub) + '<main>' +
+      (mis.length ? '<div class="card pad" style="margin-bottom:12px"><div class="row"><strong class="grow">Tus pedidos</strong><button class="btn small" id="ver-mis">Ver estado</button>' + (info.cuenta_qr ? '<button class="btn small prim" data-pedir-cuenta>🧾 Pedir la cuenta</button>' : '') + '</div></div>' : '') +
+      (info.reservada ? '<div class="banner warn" style="border-radius:8px;margin-bottom:12px">Esta mesa está reservada. Podés ver la carta; para pedir, consultá con el personal.</div>' : '') + (info.pedidos_habilitados ? '' : '<div class="banner warn" style="border-radius:8px;margin-bottom:12px">En este momento los pedidos desde el celular están pausados. Podés ver la carta y pedirle a un mozo.</div>') +
+      recHtml() + '<div id="comp"></div>' + cuentaCta() + resCta() + '</main><footer class="pub">Dirección del local<br><span class="mp-pie">powered by<img src="assets/mesapyae-logo.png" alt="Mesa Pya\'e by Ser o Límites"></span></footer>';
+    if (M.$('#ver-mis')) M.$('#ver-mis').onclick = function () { estado(mis[0].status_token); };
+    M.$$('[data-pedir-cuenta]').forEach(function (b) { b.onclick = function () { cuenta(); }; });
+    Composer({
+      el: M.$('#comp'), menu: info.menu, publico: true, siempreDetalle: false, vista: vista, onVista: function (v) { vista = v; try { sessionStorage.setItem('mesapyae.vista.' + token, JSON.stringify(v)); } catch (e) { } },
+      pedirAlias: info.tipo !== 'MESA', aliasObligatorio: info.tipo !== 'MESA', aliasLabel: 'Tu nombre (para llamarte cuando esté listo)',
+      pedirWhatsapp: info.tipo !== 'MESA' ? info.whatsapp || '' : '', waInicial: recGuardada('mesapyae.wa'), negocio: info.negocio,
+      personasNombres: info.personas || [],
+      armador: (info.modulos || []).indexOf('ARMADOR') >= 0, // Upgrade "Armá tu pedido"
+      ver3d: (info.modulos || []).indexOf('MENU3D') >= 0 ? function (p, agregar) { Menu3D.abrir(p, { onAgregar: agregar }); } : null, botonTxt: info.pedidos_habilitados && !info.reservada ? 'Confirmar pedido' : 'Pedidos pausados', cancelTxt: 'Seguir mirando',
+      contexto: info.tipo === 'MESA' ? 'Pedido para ' + esc(info.mesa) + '.' : 'Pedido para retirar en el mostrador.',
+      onSubmit: function (pl) {
+        if (!info.pedidos_habilitados || info.reservada) return Promise.reject({ message: info.reservada ? 'Esta mesa está reservada. Consultá con el personal.' : 'Los pedidos desde el celular están pausados. Pedile a un mozo.' });
+        pl.token = token;
+        var rc = M.$('#rec-cel');
+        if (rc && rc.value.trim()) { pl.rec_celular = rc.value.trim(); pl.rec_unirse = !!(M.$('#rec-unir') && M.$('#rec-unir').checked); try { localStorage.setItem('mesapyae.rec.cel', pl.rec_celular); } catch (e) { } }
+        if (pl.whatsapp) { try { localStorage.setItem('mesapyae.wa', pl.whatsapp); } catch (e) { } }
+        return M.call('public.order', pl, { publico: true, retries: 2 }).then(function (r) {
+          guardar({ numero: r.numero, status_token: r.status_token, total_gs: r.total_gs, t: Date.now() });
+          if (r.recompensa && r.recompensa.token) { try { localStorage.setItem('mesapyae.rec.token', r.recompensa.token); } catch (e) { } }
+          S_rec = r.recompensa;
+          estado(r.status_token, true);
+        });
+      }
+    });
+  }
+
+  var S_rec = null;
+  function recGuardada(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  // Módulo Gold · Reseñas: acceso fijo para calificar y dejar la reseña en Google (para todos, sin filtro ni premio por Google)
+  function resCta() {
+    var R = info.resenas;
+    if (!R || info.tipo !== 'MESA' || !token) return '';
+    return '<a class="card pad res-cta" href="resena.html?t=' + encodeURIComponent(token) + '"><span style="font-size:1.6rem">⭐</span><span class="grow"><strong>¿Cómo te atendimos?</strong><br><span class="small muted">Calificanos' + (R.google_url ? ' o dejanos tu reseña en Google' : '') + '</span></span><span class="btn small">Opinar</span></a>';
+  }
+  function recHtml() {
+    var R = info.recompensas;
+    if (!R) return '';
+    var tok = recGuardada('mesapyae.rec.token');
+    return '<div class="card pad rec-promo" style="margin-bottom:12px"><div class="row"><strong class="grow">' + (R.premios.length ? '🎁 ' : '') + esc(R.nombre) + '</strong>' +
+      (tok ? '<a class="btn small" href="tarjeta.html?c=' + encodeURIComponent(tok) + '">Mi tarjeta</a>' : '<a class="btn small" href="tarjeta.html">Sumarme</a>') + '</div>' +
+      '<p class="small muted" style="margin:4px 0 8px">Sumá un sello en cada visita' + (R.minimo_gs ? ' (compra desde ' + gs(R.minimo_gs) + ')' : '') + '. ' +
+      R.premios.map(function (p) { return p.sellos + ' sellos: ' + esc(p.nombre); }).join(' · ') + '</p>' +
+      '<label class="f" for="rec-cel">Tu celular para sumar el sello (opcional)</label><input class="input" id="rec-cel" inputmode="tel" placeholder="0981 123456" value="' + esc(recGuardada('mesapyae.rec.cel')) + '">' +
+      (tok ? '' : '<label class="check small" style="margin-top:6px"><input type="checkbox" id="rec-unir"> Si no tengo tarjeta, creármela con este número y mi nombre</label>') + '</div>';
+  }
+  // ---- Módulo Gold · Reseñas: encuesta interna + invitación a Google para todos (sin premio por la reseña)
+  var R_ok = {};
+  function resenaHtml(p) {
+    var R = info && info.resenas;
+    if (!R || (p.estado !== 'LISTO' && p.estado !== 'ENTREGADO')) return '';
+    var hecho = R_ok[p.numero];
+    return '<div class="card pad resena-box" style="text-align:left;margin:12px 0" id="resena">' +
+      (hecho ? '<strong>¡Gracias por contarnos!</strong>' + (hecho.sello ? '<div class="small" style="margin-top:4px">Sumaste un sello: ' + hecho.sello.sellos + ' de ' + hecho.sello.meta + '.</div>' : '') :
+        '<strong>' + esc(R.pregunta) + '</strong><div class="estrellas" role="radiogroup" aria-label="Calificación">' + [1, 2, 3, 4, 5].map(function (n) { return '<button type="button" class="estrella" data-st="' + n + '" aria-label="' + n + ' estrella' + (n > 1 ? 's' : '') + '">★</button>'; }).join('') + '</div>' +
+        '<textarea class="input" id="res-com" maxlength="500" placeholder="Contanos qué te gustó o qué podemos mejorar (opcional)" style="min-height:64px"></textarea>' +
+        '<button class="btn prim block" id="res-env" style="margin-top:8px" disabled>Enviar al equipo</button>') +
+      (R.google_url ? '<div class="resena-google"><span class="small">¿Te gustaría compartir tu experiencia en Google?</span><a class="btn block" id="res-g" target="_blank" rel="noopener" href="' + esc(R.google_url) + '">Dejar una reseña en Google</a></div>' : '') + '</div>';
+  }
+  function resenaBind(st) {
+    var box = M.$('#resena'); if (!box) return;
+    var n = 0, num = (M.$('h1') || {}).textContent;
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-st]');
+      if (b) { n = +b.getAttribute('data-st'); M.$$('.estrella', box).forEach(function (x) { x.classList.toggle('on', +x.getAttribute('data-st') <= n); }); M.$('#res-env').disabled = false; clearTimeout(timer); }
+    });
+    if (M.$('#res-env')) M.$('#res-env').onclick = function () {
+      var b = this; b.disabled = true;
+      M.call('public.resena', { status_token: st, estrellas: n, comentario: M.$('#res-com').value.trim(), request_id: M.uid() }, { publico: true, retries: 2 }).then(function (r) {
+        R_ok[num] = { id: r.resena_id, sello: r.sello }; estado(st);
+      }, function (e) { b.disabled = false; M.toast(e.message, 'error'); });
+    };
+    if (M.$('#res-g')) M.$('#res-g').addEventListener('click', function () { M.call('public.resenaGoogle', { resena_id: (R_ok[num] || {}).id || '' }, { publico: true }).catch(function () { }); });
+  }
+  var timer = null;
+
+  // ---- Pedir la cuenta desde el celular: comprobante (ticket o factura) + cómo va a pagar. Avisa al mozo y a la caja.
+  var MEDIO_CLI = { EFECTIVO: 'Efectivo', TRANSFERENCIA: 'Transferencia', TC: 'Tarjeta de crédito', TD: 'Tarjeta de débito o QR' };
+  function medioCli(m) { return MEDIO_CLI[m] || M.medioTxt(m); }
+  var C = { esperando: false, editar: false };
+  function cuentaCta() {
+    if (!info.cuenta_qr) return '';
+    return '<div class="card pad cuenta-cta cta-cuenta-pie"><span style="font-size:1.6rem">🧾</span><span class="grow"><strong>¿Ya quieren pagar?</strong><br><span class="small muted">Pedí la cuenta desde acá. Le avisamos al mozo y a la caja.</span></span><button class="btn small prim" data-pedir-cuenta>Pedir la cuenta</button></div>';
+  }
+  function facturaGuardada() { try { return JSON.parse(localStorage.getItem('mesapyae.factura') || 'null'); } catch (e) { return null; } }
+  function cuenta(silencioso) {
+    clearTimeout(timer);
+    if (!silencioso) { C.editar = false; document.getElementById('app').innerHTML = head(info.mesa) + '<main><div class="empty">Cargando tu cuenta…</div></main>'; window.scrollTo(0, 0); }
+    M.call('public.cuenta', { token: token }, { publico: true, retries: 1 }).then(pintarCuenta, function (e) {
+      if (silencioso) { timer = setTimeout(function () { cuenta(true); }, 15000); return; }
+      M.toast(e.message || 'No pudimos cargar tu cuenta.', 'error'); render();
+    });
+  }
+  function resumenPedido(c) {
+    var cp = c.comprobante, pd = c.pedido || {};
+    return '<div class="small" style="margin-top:6px">' +
+      (cp ? (cp.tipo === 'FACTURA' ? 'Factura a <strong>' + esc(cp.razon) + '</strong> · RUC/CI ' + esc(cp.ruc) : 'Ticket (sin factura)') + '<br>' : '') +
+      (pd.medio ? 'Pago: <strong>' + esc(medioCli(pd.medio)) + '</strong>' + (pd.paga_con ? ' · paga con ' + gs(pd.paga_con) + (pd.paga_con > c.total_gs - c.pagado_gs ? ' (vuelto ' + gs(pd.paga_con - (c.total_gs - c.pagado_gs)) + ')' : '') : '') + '<br>' : '') +
+      (pd.separado ? 'Pagan por separado<br>' : '') + '</div>';
+  }
+  function pintarCuenta(d) {
+    var c = d.cuenta, app = document.getElementById('app');
+    var volver = '<button class="btn block" id="volver" style="margin-top:12px">Volver al menú</button>';
+    if (!c || !c.total_gs) {
+      var cobrada = C.esperando && !c;
+      C.esperando = false;
+      app.innerHTML = head(d.mesa || info.mesa) + '<main><div class="card pad" style="text-align:center">' +
+        (cobrada ? '<h2>¡Gracias por tu visita!</h2><p>Tu cuenta ya quedó cobrada.</p>' : '<h2>Todavía no hay consumos</h2><p class="muted">Cuando tu mesa tenga pedidos cargados, vas a poder pedir la cuenta desde acá.</p>') +
+        '</div>' + (cobrada ? resCta() : '') + volver + '</main>';
+      M.$('#volver').onclick = function () { clearTimeout(timer); render(); };
+      return;
+    }
+    var falta = c.total_gs - (c.pagado_gs || 0);
+    var pedida = c.estado === 'CIERRE_SOLICITADO';
+    var porCliente = pedida && c.pedido && c.pedido.origen === 'CLIENTE';
+    var form = !porCliente || C.editar;
+    C.esperando = pedida;
+    var prev = c.comprobante && c.comprobante.tipo === 'FACTURA' ? c.comprobante : null;
+    var fg = facturaGuardada();
+    var cpIni = prev || (fg && fg.ruc ? { tipo: 'FACTURA', ruc: fg.ruc, razon: fg.razon, email: fg.email } : (c.comprobante || null));
+    var pd = c.pedido || {};
+    var medioIni = pd.medio || '';
+    var html = head(d.mesa || info.mesa) + '<main>' +
+      (porCliente && !C.editar ? '<div class="banner ok" style="border-radius:8px;margin-bottom:12px"><strong>✅ Pediste la cuenta' + (c.cierre_solicitado_en ? ' (' + M.hora(c.cierre_solicitado_en) + ')' : '') + '</strong><br>Ya le avisamos al mozo y a la caja; en un momento te atienden.' + resumenPedido(c) + '</div>' : '') +
+      (pedida && !porCliente ? '<div class="banner" style="border-radius:8px;margin-bottom:12px">Tu mozo ya pidió la cuenta. Si querés factura o contarnos cómo vas a pagar, completalo abajo.</div>' : '') +
+      '<div class="card pad"><h2 style="margin-top:0">Tu cuenta</h2><div class="cuenta-items">' +
+      c.items.map(function (i) { return '<div class="ci"><span class="num">' + i.cantidad + '×</span><span class="grow">' + esc(i.nombre) + (i.opciones ? ' <span class="muted small">(' + esc(i.opciones) + ')</span>' : '') + '</span><span class="num">' + gs(i.total_gs) + '</span></div>'; }).join('') + '</div>' +
+      '<div class="total-row" style="margin-top:8px"><span>Total</span><span class="num">' + gs(c.total_gs) + '</span></div>' +
+      (c.pagado_gs ? '<div class="total-row small"><span>Ya pagado</span><span class="num">' + gs(c.pagado_gs) + '</span></div><div class="total-row"><span>Falta pagar</span><span class="num">' + gs(falta) + '</span></div>' : '') +
+      '</div>';
+    if (form) {
+      html += '<div class="card pad" style="margin-top:12px" id="cuenta-form"><h3 style="margin:0 0 8px">¿Querés factura?</h3>' + M.comprobanteForm(cpIni) +
+        '<h3 style="margin:16px 0 8px">¿Cómo van a pagar?</h3><div class="seg medios" style="display:flex;gap:8px;flex-wrap:wrap">' +
+        d.medios.map(function (m) { return '<label class="opt' + (m === medioIni ? ' on' : '') + '"><input type="radio" name="medio" value="' + esc(m) + '"' + (m === medioIni ? ' checked' : '') + '> <span class="grow">' + esc(medioCli(m)) + '</span></label>'; }).join('') + '</div>' +
+        '<div data-efc class="' + (medioIni === 'EFECTIVO' ? '' : 'hidden') + '" style="margin-top:8px"><label class="f" for="paga-con">¿Con cuánto vas a pagar? (opcional, para traerte el vuelto)</label><input class="input num" id="paga-con" inputmode="numeric" placeholder="Ej.: 100.000" value="' + (pd.paga_con ? gs(pd.paga_con).replace('Gs. ', '') : '') + '"></div>' +
+        '<label class="check" style="margin-top:10px"><input type="checkbox" id="separado"' + (pd.separado ? ' checked' : '') + '> Vamos a pagar por separado</label>' +
+        '<p class="small" data-err style="color:var(--vino);min-height:1em"></p>' +
+        '<button class="btn prim big block" id="enviar-cuenta">' + (porCliente ? 'Guardar cambios' : 'Pedir la cuenta') + '</button>' +
+        '<p class="small muted" style="margin:8px 0 0">Le avisamos al mozo y a la caja para que te cobren sin esperas.</p></div>';
+    } else {
+      html += '<button class="btn block" id="editar-cuenta" style="margin-top:12px">Cambiar factura o forma de pago</button>';
+    }
+    html += volver + '</main>';
+    app.innerHTML = html;
+    M.$('#volver').onclick = function () { clearTimeout(timer); C.editar = false; render(); };
+    if (M.$('#editar-cuenta')) M.$('#editar-cuenta').onclick = function () { C.editar = true; clearTimeout(timer); pintarCuenta(d); };
+    if (form) {
+      var f = M.$('#cuenta-form');
+      M.comprobanteBind(f);
+      f.addEventListener('change', function (e) {
+        if (e.target.name !== 'medio') return;
+        M.$$('.medios .opt', f).forEach(function (l) { l.classList.toggle('on', l.querySelector('input').checked); });
+        M.$('[data-efc]', f).classList.toggle('hidden', e.target.value !== 'EFECTIVO');
+      });
+      M.$('#enviar-cuenta').onclick = function () {
+        var b = this, err = M.$('[data-err]', f);
+        var cp = M.comprobanteLeer(f);
+        if (cp.error) { err.textContent = cp.error; return; }
+        var medio = (M.$('[name="medio"]:checked', f) || {}).value;
+        if (!medio) { err.textContent = 'Elegí cómo van a pagar.'; return; }
+        var con = medio === 'EFECTIVO' ? M.parseGs(M.$('#paga-con').value) : 0;
+        if (con && con < falta) { err.textContent = 'El monto en efectivo es menor que el total (' + gs(falta) + ').'; return; }
+        err.textContent = ''; b.disabled = true;
+        M.call('public.pedirCuenta', { token: token, comprobante: cp, medio: medio, paga_con: con || 0, separado: M.$('#separado').checked }, { publico: true, retries: 1 }).then(function (r) {
+          if (cp.tipo === 'FACTURA') { try { localStorage.setItem('mesapyae.factura', JSON.stringify({ ruc: cp.ruc, razon: cp.razon, email: cp.email || '' })); } catch (e) { } }
+          C.editar = false; pintarCuenta(r); window.scrollTo(0, 0);
+        }, function (e) { b.disabled = false; err.textContent = e.message || 'No se pudo pedir la cuenta. Probá de nuevo.'; });
+      };
+    }
+    // Mientras espera, se actualiza sola: cuando la caja cobra, le agradece.
+    if (pedida && !form) timer = setTimeout(function () { cuenta(true); }, 10000);
+  }
+
+  function estado(st, recien) {
+    clearTimeout(timer);
+    M.call('public.status', { status_token: st }, { publico: true, retries: 1 }).then(function (p) {
+      var pasos = ['PENDIENTE', 'ACEPTADO', 'EN_PREPARACION', 'LISTO', 'ENTREGADO'];
+      var idx = pasos.indexOf(p.estado);
+      var txt = {
+        PENDIENTE: info && info.requiere_aceptacion ? 'Recibimos tu pedido. Un integrante del equipo lo va a confirmar en un momento.' : 'Recibimos tu pedido.',
+        ACEPTADO: 'Tu pedido fue confirmado y está en la cola de cocina.', EN_PREPARACION: 'Estamos preparando tu pedido.',
+        LISTO: info && info.tipo !== 'MESA' ? '¡Tu pedido está listo! Retiralo en el mostrador.' : '¡Tu pedido está listo! En breve te lo llevamos.',
+        ENTREGADO: 'Pedido entregado. ¡Buen provecho!', CANCELADO: 'El pedido fue cancelado. Consultá con el personal.'
+      }[p.estado];
+      document.getElementById('app').innerHTML = head(p.mesa || ('Para llevar · ' + p.alias)) + '<main><div class="card pad" style="text-align:center">' +
+        (recien ? '<p class="muted" style="margin-top:0">¡Gracias!</p>' : '') + '<div class="muted small">Pedido</div><h1 style="font-size:2.4rem">' + esc(p.numero) + '</h1>' +
+        (p.estado === 'CANCELADO' ? '' : '<div class="estado-steps">' + ['Recibido', 'Confirmado', 'Preparando', 'Listo', 'Entregado'].map(function (t, i) { return '<div class="' + (i <= idx ? 'on' : '') + '">' + t + '</div>'; }).join('') + '</div>') +
+        '<p style="font-size:1.1rem">' + esc(txt) + '</p>' +
+        '<div style="text-align:left;margin-top:12px">' + p.items.map(function (i) { return '<div class="small">' + i.cantidad + '× ' + esc(i.nombre) + (i.opciones ? ' <span class="muted">(' + esc(i.opciones) + ')</span>' : '') + '</div>'; }).join('') +
+        (S_rec ? '<div class="banner ok" style="border-radius:8px;margin:10px 0">' + esc(S_rec.nombre) + ': tu sello se suma cuando pagues (' + S_rec.sellos + ' de ' + S_rec.meta + ').' + (S_rec.token ? ' <a href="tarjeta.html?c=' + encodeURIComponent(S_rec.token) + '">Ver mi tarjeta</a>' : '') + '</div>' : '') +
+        '<div class="total-row"><span>Total</span><span class="num">' + gs(p.total_gs) + '</span></div>' + (info.cuenta_qr ? '<button class="btn prim block" data-pedir-cuenta style="margin-top:8px">🧾 Pedir la cuenta</button>' : '<p class="small muted">' + (info.tipo === 'MESA' ? 'Cuando quieras pagar, pedile la cuenta a tu mozo.' : 'El pago se realiza en caja.') + '</p>') + '</div>' +
+        resenaHtml(p) + '<button class="btn block" id="volver">Volver al menú</button></div></main>';
+      M.$('#volver').onclick = function () { clearTimeout(timer); render(); };
+      M.$$('[data-pedir-cuenta]').forEach(function (b) { b.onclick = function () { cuenta(); }; });
+      resenaBind(st);
+      if (p.estado !== 'ENTREGADO' && p.estado !== 'CANCELADO') timer = setTimeout(function () { estado(st); }, 8000);
+    }, function (e) {
+      M.toast(e.message || 'No se pudo consultar el estado.', 'error');
+      timer = setTimeout(function () { estado(st, recien); }, 12000);
+    });
+  }
+})();
+</script>
+</body>
+</html>

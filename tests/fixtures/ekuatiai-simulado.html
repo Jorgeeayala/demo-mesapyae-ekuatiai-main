@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ekuatiai</title>
+<!--
+  Formulario SIMULADO de e-Kuatia'i para la prueba E2E del migrador (no es el portal real).
+  Reproduce lo que se vio en el portal real (22/10/2026):
+  - etiquetas en una columna y el control en la columna de al lado (no dentro de un mismo .form-group);
+  - "Nombre o Razón Social" de solo lectura: la completa el portal al consultar el RUC;
+  - ítems en filas ng-repeat con ng-model row.d…Model (nombres del SIFEN), id con número de fila y type=number;
+  - "Tasa" de cada ítem: ui-select (IVA 10% / IVA 5% / Exenta);
+  - "Tipo de Pago": una fila por pago con su ui-select; "Agregar" (emitir.agregarPago()) crea la fila siguiente;
+  - "Tipo Obligación": ui-select múltiple (211 - IVA …);
+  - datos del emisor que no se deben tocar, PIN y botón de emitir.
+  El "modelo" se actualiza SOLO con eventos (input/change/click), como en AngularJS.
+-->
+<style>
+  body{font:14px sans-serif;margin:20px} .row{display:flex;gap:8px;align-items:center;margin:6px 0}
+  .col-md-2{width:170px} .col-md-4{width:320px} td,th{padding:3px;border:1px solid #ccc} input{width:150px}
+  .ui-select-container{position:relative;display:inline-block;min-width:200px;border:1px solid #aaa;padding:2px}
+  .ui-select-choices{position:absolute;background:#fff;border:1px solid #888;list-style:none;margin:0;padding:0;z-index:5;min-width:200px}
+  .ui-select-choices-row{padding:3px 6px;cursor:pointer} .ui-select-match-item{margin-right:4px}
+</style>
+</head>
+<body>
+<div id="menu"><a href="#!/factura/nueva" id="ir-nueva">Nueva factura</a></div>
+<div id="vista"></div>
+<script>
+(function () {
+  var modelo = window.modelo = { receptor: {}, items: [], emisor: { ruc: '80099999' } };
+  var IVAS = ['IVA 10%', 'IVA 5%', 'Exenta'];
+  var TIPOS = ['Efectivo', 'Cheque', 'Tarjeta de crédito', 'Tarjeta de débito', 'Transferencia', 'Giro', 'Billetera electrónica', 'Pago electrónico', 'Otro'];
+  var OBLIG = ['211 - IMPUESTO AL VALOR AGREGADO - GRAVADAS Y EXONERADAS - EXPORTADORES', '700 - IMPUESTO A LA RENTA EMPRESARIAL - REGIMEN GENERAL', '715 - IMPUESTO A LA RENTA PERSONAL'];
+
+  // ui-select simple: toggle con ng-click, buscador, filas .ui-select-choices-row; placeholder aparte.
+  function uiSelect(ngModel, placeholder, valor) {
+    return '<div class="ui-select-container ui-select-bootstrap dropdown" ng-model="' + ngModel + '">' +
+      '<div class="ui-select-match" placeholder="' + placeholder + '"><span class="btn btn-default form-control ui-select-toggle" ng-click="$select.activate()">' +
+      '<span class="ui-select-placeholder text-muted"' + (valor ? ' style="display:none"' : '') + '>' + placeholder + '</span>' +
+      '<span class="ui-select-match-text pull-left">' + (valor || '') + '</span><span class="caret"></span></span></div>' +
+      '<input type="search" class="form-control ui-select-search" placeholder="' + placeholder + '" style="display:none">' +
+      '<ul class="ui-select-choices dropdown-menu" style="display:none"></ul></div>';
+  }
+  function activarUiSelect(cont, opciones, alElegir) {
+    var q = cont.querySelector('.ui-select-search'), ul = cont.querySelector('.ui-select-choices');
+    function lista() {
+      var f = (q.value || '').toLowerCase();
+      ul.innerHTML = opciones.filter(function (t) { return t.toLowerCase().indexOf(f) >= 0; }).map(function (t) {
+        return '<li class="ui-select-choices-group"><div class="ui-select-choices-row" role="option"><span class="ui-select-choices-row-inner"><span class="ng-binding">' + t + '</span></span></div></li>';
+      }).join('');
+    }
+    cont.querySelector('.ui-select-toggle').addEventListener('click', function () { q.style.display = ''; ul.style.display = 'block'; q.value = ''; lista(); });
+    q.addEventListener('input', lista);
+    ul.addEventListener('click', function (e) {
+      var r = e.target.closest('.ui-select-choices-row'); if (!r) return;
+      var t = r.textContent.trim();
+      cont.querySelector('.ui-select-match-text').textContent = t;
+      cont.querySelector('.ui-select-placeholder').style.display = 'none';
+      q.style.display = 'none'; ul.style.display = 'none';
+      alElegir(t);
+    });
+  }
+  function fila(etiqueta, control) { return '<div class="row"><div class="col-md-2"><label class="control-label">' + etiqueta + '</label></div><div class="col-md-4">' + control + '</div></div>'; }
+
+  function render() {
+    if (location.hash !== '#!/factura/nueva') { document.getElementById('vista').innerHTML = ''; return; }
+    modelo.receptor = {}; modelo.items = []; modelo.pagos = []; modelo.obligaciones = []; // cada "Nueva factura" empieza limpia
+    document.getElementById('vista').innerHTML =
+      '<h2>Emitir DTE</h2>' +
+      fila('RUC del emisor', '<input ng-model="emisor.ruc" value="80099999" readonly>') +
+      '<h3>Datos del Receptor</h3>' +
+      fila('RUC del Receptor', '<input id="rruc" ng-model="emitir.datos.receptor.ruc">') +
+      fila('Dígito Verificador', '<input ng-model="emitir.datos.receptor.dv" placeholder="DV" style="width:40px"> <button type="button" id="btn-buscar">Buscar</button>') +
+      fila('Nombre o Razón Social', '<input ng-model="emitir.datos.receptor.razonSocial" readonly>') +
+      fila('Correo electrónico', '<input ng-model="emitir.datos.receptor.email">') +
+      '<h3>Items de la Operación</h3><table><thead><tr><th>Descripción</th><th>Cantidad</th><th>Precio</th><th>Descuento</th><th>Tasa</th><th>Total Operación Item</th></tr></thead><tbody id="items"></tbody></table>' +
+      '<button type="button" id="btn-agregar" ng-click="emitir.agregarItem()">Agregar</button>' +
+      '<h3>Datos de la Operación y Pagos</h3>' +
+      fila('Condición', uiSelect('emitir.datos.condicion', 'Seleccionar Condición...', 'Contado')) +
+      '<div id="pagos"></div>' +
+      '<button class="btn btn-sm btn-info" type="button" ng-click="emitir.agregarPago()">Agregar</button>' +
+      '<h3>Obligaciones Afectadas</h3>' +
+      fila('Tipo Obligación', '<div class="ui-select-container ui-select-multiple ui-select-bootstrap dropdown form-control" name="tipoObligacionAfectadaRG90" id="tipoObligacionAfectadaRG90" ng-model="emitir.datos.selectedObligacionRG90">' +
+        '<div><span class="ui-select-match" placeholder="Seleccionar Obligación..."></span><input type="search" class="ui-select-search input-xs" placeholder="Seleccionar Obligación..." ng-click="$select.activate()" ng-model="$select.search" role="combobox"></div>' +
+        '<ul class="ui-select-choices ui-select-choices-content ui-select-dropdown dropdown-menu ng-hide" style="display:none"><li class="ui-select-choices-group"></li></ul></div>') +
+      '<p>Total: <b id="total">0</b></p>' +
+      fila('PIN del certificado', '<input type="password" id="pin" ng-model="firma.pin">') +
+      '<button type="button" id="btn-emitir">Previsualizar y emitir</button><div id="resultado"></div>';
+    bind();
+  }
+  function enlazar(el, obj, k) {
+    ['input', 'change'].forEach(function (t) { el.addEventListener(t, function () { obj[k] = el.value; total(); }); });
+  }
+  function total() {
+    var t = modelo.items.reduce(function (a, i) { return a + Number(i.cantidad || 0) * Number(i.precioUnitario || 0) - Number(i.descuento || 0); }, 0);
+    var el = document.getElementById('total'); if (el) el.textContent = t;
+    [].forEach.call(document.querySelectorAll('[ng-model="row.dTotOpeItemModel"]'), function (x, k) { var i = modelo.items[k]; if (i) x.value = Number(i.cantidad || 0) * Number(i.precioUnitario || 0) - Number(i.descuento || 0); });
+  }
+  // Una fila de pago: solo "Tipo de Pago" (como en el portal) y su Eliminar.
+  function agregarFilaPago() {
+    var p = { tipo: '' }; modelo.pagos.push(p);
+    var d = document.createElement('div'); d.setAttribute('ng-repeat', 'pago in emitir.datos.pagos');
+    d.innerHTML = fila('Tipo de Pago', uiSelect('pago.iTiPago', 'Seleccionar Tipo de Pago...', '') + ' <button type="button" class="btn btn-danger btn-xs">Eliminar</button>');
+    document.getElementById('pagos').appendChild(d);
+    activarUiSelect(d.querySelector('.ui-select-container'), TIPOS, function (t) { p.tipo = t; });
+  }
+  function bind() {
+    var r = modelo.receptor;
+    enlazar(document.querySelector('[ng-model="emitir.datos.receptor.ruc"]'), r, 'ruc');
+    enlazar(document.querySelector('[ng-model="emitir.datos.receptor.dv"]'), r, 'dv');
+    enlazar(document.querySelector('[ng-model="emitir.datos.receptor.email"]'), r, 'email');
+    document.getElementById('btn-buscar').onclick = function () {
+      var ruc = r.ruc;
+      setTimeout(function () {
+        if (ruc === '80012345') { var z = document.querySelector('[ng-model="emitir.datos.receptor.razonSocial"]'); z.value = 'COMERCIAL ÑANDUTÍ S.A.'; r.razonSocial = z.value; window.consultasRuc = (window.consultasRuc || 0) + 1; }
+        if (ruc === '1234567') { var y = document.querySelector('[ng-model="emitir.datos.receptor.razonSocial"]'); y.value = 'JUAN PÉREZ'; r.razonSocial = y.value; }
+      }, 500);
+    };
+    // Con CI no hay botón de búsqueda que valga: el portal consulta al salir del campo.
+    document.querySelector('[ng-model="emitir.datos.receptor.ruc"]').addEventListener('change', function () { if (r.ruc === '1234567') document.getElementById('btn-buscar').click(); });
+    activarUiSelect(document.querySelector('[ng-model="emitir.datos.condicion"]'), ['Contado', 'Crédito'], function () {});
+    agregarFilaPago(); // el portal arranca con una fila de pago
+    document.querySelector('[ng-click="emitir.agregarPago()"]').onclick = function () { setTimeout(agregarFilaPago, 150); };
+    document.getElementById('btn-agregar').onclick = function () {
+      setTimeout(function () {
+        var it = { iva: '' }; modelo.items.push(it);
+        var n = modelo.items.length - 1;
+        var tr = document.createElement('tr'); tr.setAttribute('ng-repeat', 'row in emitir.datos.items');
+        tr.innerHTML = '<td><input ng-model="row.dDesProSerModel" id="formItem.dDesProSer' + n + '" placeholder="Ingrese la descripción" class="form-control"></td>' +
+          '<td><input type="number" min="0" ng-model="row.dCantProSerModel" id="formItem.dCantProSer' + n + '" ng-change="calculototal(row)" class="form-control"></td>' +
+          '<td><input type="number" min="0" step=".00000001" ng-model="row.dPUniProSerModel" id="formItem.dPUniProSer' + n + '" ng-change="calculototal(row)" placeholder="Ingrese el precio" required class="form-control"></td>' +
+          '<td><input type="number" min="0" ng-model="row.dDescItemModel" id="formItem.dDescItem' + n + '" ng-change="calculototal(row)" class="form-control"></td>' +
+          '<td><label class="control-label">Tasa</label> ' + uiSelect('row.dTasaIVAModel', 'Seleccionar', '') + '</td>' +
+          '<td><input type="number" readonly ng-model="row.dTotOpeItemModel" placeholder="Total Operación Item" class="form-control"></td>';
+        document.getElementById('items').appendChild(tr);
+        enlazar(tr.querySelector('[ng-model="row.dDesProSerModel"]'), it, 'descripcion');
+        enlazar(tr.querySelector('[ng-model="row.dCantProSerModel"]'), it, 'cantidad');
+        enlazar(tr.querySelector('[ng-model="row.dPUniProSerModel"]'), it, 'precioUnitario');
+        enlazar(tr.querySelector('[ng-model="row.dDescItemModel"]'), it, 'descuento');
+        activarUiSelect(tr.querySelector('.ui-select-container'), IVAS, function (t) { it.iva = t; });
+      }, 150);
+    };
+    // Obligación (ui-select múltiple)
+    var ob = document.getElementById('tipoObligacionAfectadaRG90'), obq = ob.querySelector('.ui-select-search'), obul = ob.querySelector('.ui-select-choices'), obg = obul.querySelector('li');
+    function obLista() {
+      var f = (obq.value || '').toLowerCase();
+      obg.innerHTML = OBLIG.filter(function (t) { return t.toLowerCase().indexOf(f) >= 0 && modelo.obligaciones.indexOf(t) < 0; }).map(function (t) {
+        return '<div class="ui-select-choices-row" role="option"><span class="ui-select-choices-row-inner"><div class="ng-binding">' + t + '</div></span></div>'; }).join('');
+    }
+    obq.addEventListener('click', function () { obul.style.display = 'block'; obLista(); });
+    obq.addEventListener('input', obLista);
+    obul.addEventListener('click', function (e) {
+      var r2 = e.target.closest('.ui-select-choices-row'); if (!r2) return;
+      var t = r2.textContent.trim(); modelo.obligaciones.push(t);
+      ob.querySelector('.ui-select-match').insertAdjacentHTML('beforeend', '<span class="ui-select-match-item btn btn-default btn-xs"><span class="close">×</span> <span>' + t + '</span></span>');
+      obq.value = ''; obLista();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { obul.style.display = 'none'; } });
+    document.getElementById('btn-emitir').onclick = function () {
+      if (document.getElementById('pin').value.length !== 4) { document.getElementById('resultado').textContent = 'Ingresá el PIN.'; return; }
+      window.emitidas = (window.emitidas || 0) + 1;
+      setTimeout(function () {
+        var d = document.createElement('div'); d.className = 'alert alert-success';
+        d.textContent = 'Documento electrónico aprobado. CDC: 01800999990001001000000122026102210000000017';
+        document.getElementById('resultado').appendChild(d);
+      }, 300);
+    };
+  }
+  window.addEventListener('hashchange', render);
+  render();
+})();
+</script>
+</body>
+</html>
